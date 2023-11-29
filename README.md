@@ -11,6 +11,9 @@ For each cluster, Silhouette provide 3 keys metrics:
 
 De-escalation effort lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
 
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.png?raw=true)
+
+
 ## pre-requisites
 - Python
 - An Azure Table to store Azure silhouette data
