@@ -5,9 +5,11 @@
 Silhouette runs through all your SPNs and groups them into cluster. For each cluster, it pulls the actual Azure RBAC permissions from Entra and compares them to Azure Activity logs in a Log Analytics Workspace.
 
 For each cluster, Silhouette provide 3 keys metrics:
-- Inner score: a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
-- Outer score: a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
-- De-escalation effort: the difference between the two scores.
+- Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
+- Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
+- De-escalation effort (green): the difference between the two scores.
+
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.png?raw=true)
 
 De-escalation effort lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
 
