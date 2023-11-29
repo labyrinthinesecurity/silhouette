@@ -9,17 +9,17 @@ For each cluster, Silhouette provide 3 keys metrics:
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
 - De-escalation effort (green): the difference between the two scores.
 
-![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.png?raw=true)
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG | width=50%)
 
 De-escalation effort lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
 
-![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png?raw=true)
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png | width=50%)
 
 ## De-escalation effort hierarchy
 
 The effort ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
 
-![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.png?raw=true)
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG | width=50%)
 
 ## pre-requisites
 - Python
