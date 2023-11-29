@@ -1,0 +1,75 @@
+ `;
+    // Parse CSV data
+    const rows = csvData.split('\n').map(row => row.split(';'));
+
+    // Extract cluster, inner, and score data for chart
+    const clusters = rows.slice(1).map(row => row[0]);
+    const counts = rows.slice(1).map(row => row[1]);
+    const outerData = rows.slice(1).map(row => parseInt(row[2]));
+    const innerData = rows.slice(1).map(row => parseInt(row[3]));
+    const scoreData = rows.slice(1).map(row => parseInt(row[4]));
+
+    // Initialize ECharts instance
+    const chart = echarts.init(document.getElementById('stackedBarChart'));
+
+    // Chart configuration
+    const options = {
+      title: {
+        text: 'Per cluster SPNs de-escalation silhouette'
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'shadow'
+        }
+      },
+      legend: {
+        data: ['Outer and score', 'Inner silhouette']
+      },
+      xAxis: {
+        type: 'category',
+        data: clusters,
+                axisLabel: {
+      interval: 0, // Display all labels
+      rotate: 90 // Rotate labels for better visibility
+    }
+      },
+      yAxis: [
+              {
+        type: 'value',
+        name: 'Inner silhouettes and score'
+      },
+              {
+      type: 'value',
+      name: 'Outer silhouettes'
+    }
+      ],
+      series: [
+        {
+          name: 'Inner',
+          type: 'bar',
+          stack: 'values',
+          data: innerData,
+          barWidth: '50%'
+        },
+        {
+          name: 'Score',
+          type: 'bar',
+          stack: 'values',
+          data: scoreData,
+          barWidth: '50%'
+        },
+        {
+          name: 'Outer',
+          type: 'bar',
+          yAxisIndex: 0, // Use a secondary y-axis
+          data: outerData,
+          barWidth: '50%', // Adjust the width of the bar
+          barGap: '-00%', // Remove the space between bars
+        }
+      ]
+    };
+    chart.setOption(options);
+  </script>
+</body>
+</html>
