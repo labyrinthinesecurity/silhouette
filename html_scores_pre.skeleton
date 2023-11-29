@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Per cluster SPNs de-escalation silhouette</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/milligram@1.4.1/dist/milligram.min.css">
+  <!-- Include ECharts library from a CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.2.2/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div id="stackedBarChart" style="width: 800px; height: 600px;"></div>
+ <table id="categoryTable" style="margin-top: 20px; border-collapse: collapse; width: 100%;">
+    <thead>
+      <tr>
+        <th>Cluster</th>
+        <th>Category</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Table content will be added dynamically -->
+    </tbody>
+  </table>
+  <script>
+    const csvData = `cluster;counts;outer;inner;score
