@@ -13,6 +13,11 @@ De-escalation effort lets you quickly determine which cluster to tackle in prior
 
 ![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png?raw=true)
 
+## De-escalation effort hierarchy
+
+The effort ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
+
+![alt text](https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.png?raw=true)
 
 ## pre-requisites
 - Python
