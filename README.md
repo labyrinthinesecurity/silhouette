@@ -28,7 +28,9 @@ The effort ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenan
 
 ## configure
 
-You must set a few environment variables:
+Most of the code is held in file common.py
+
+To get started, you must set a few environment variables which are loaded into common.py:
 
 - wid: the Log Analytics workspace ID, where all activity logs are collected
 - account: the Azure storage account that silhouette will use to store its data
@@ -40,6 +42,8 @@ You must set a few environment variables:
 - run_goldensource: name of an Azure table in the account, from where the golden source will be read (for analytics)
 
 The first time you run silhouette, you don't have a run_goldensource and you don't have a run_groundsource.
+
+You may also wish to adjust logsRetention, the Log Analytics retention parameter (in days), which is 90 days by default. Don't set this parameter to 0. This global variable is declared in common.py
 
 ## step 1: collect
 
@@ -55,6 +59,15 @@ Run clusterize.py to group SPNs into clusters. This only takes a few seconds.
 
 Run minimize.py
 
-This will generate a file called silhouette.html, as well as a CSV.
+This will generate a file called silhouette.html, as well as a CSV containing cluster ID, SPN counts per cluster, inner silhouette, outer silhouette, and de-escalation score.
+
+# De-escalating
+
+## Customize role definitions
+
+investigate_cluster.py will give you a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
+This will help you reshape (or create) built-in role definitions, clusterwide.
+
+
 
 
