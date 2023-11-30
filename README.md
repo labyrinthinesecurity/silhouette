@@ -1,6 +1,6 @@
 # Silhouette for Azure, a SPN access minimizer
 
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/silhouette_logo.PNG" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/silhouette_logo.png" width="40%">
 
 ## introduction
 
