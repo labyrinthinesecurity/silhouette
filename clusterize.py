@@ -67,7 +67,7 @@ columns_to_drop.append('cluster')
 #print(columns_to_drop)
 
 result_dict=result.groupby('cluster').apply(lambda x: x.drop(columns_to_drop,axis=1).to_dict('records')).to_dict()
-with open(f"clusters_{partition}_{dstamp}.json",'w') as file:
+with open(f"clusters_{partition}.json",'w') as file:
   json.dump(result_dict,file,indent=2)
 
 print("clusters",k)
