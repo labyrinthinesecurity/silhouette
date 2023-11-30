@@ -1,5 +1,7 @@
 # Silhouette for Azure, a SPN access minimizer
 
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/silhouette_logo.PNG" width="50%">
+
 ## introduction
 
 Silhouette runs through all your SPNs and groups them into cluster. For each cluster, it pulls the actual Azure RBAC permissions from Entra and compares them to Azure Activity logs in a Log Analytics Workspace.
@@ -7,17 +9,17 @@ Silhouette runs through all your SPNs and groups them into cluster. For each clu
 For each cluster, Silhouette provide 3 keys metrics:
 - Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
-- De-escalation effort (green): the difference between the two scores.
+- De-escalation reward (green): the difference between the two scores.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG" width="50%">
 
-De-escalation effort lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
+De-escalation reward lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png" width="50%">
 
-## De-escalation effort hierarchy
+## De-escalation reward hierarchy
 
-The effort ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
+The reward ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
