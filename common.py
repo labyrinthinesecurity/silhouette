@@ -1154,7 +1154,7 @@ def investigate_principalId(pk,principalId,verbose):
 
 def build_silhouette(pk,render):
   import csv
-  with open(f"clusters_{pk}_{dstamp}.json",'r') as cz:
+  with open(f"clusters_{pk}.json",'r') as cz:
     czc=json.load(cz)
   cls=len(czc)
   with open("html_scores_pre.skeleton", 'r') as ff:
@@ -1199,7 +1199,7 @@ def investigate_cluster(pk,cluster,verbose):
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
   ground_counts={}
-  with open(f"clusters_{pk}_{dstamp}.json",'r') as cz:
+  with open(f"clusters_{pk}.json",'r') as cz:
     czc=json.load(cz)
   scluster=str(cluster)
   cntid=0
