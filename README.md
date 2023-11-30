@@ -45,6 +45,8 @@ The first time you run silhouette, you don't have a run_goldensource and you don
 
 You may also wish to adjust logsRetention, the Log Analytics retention parameter (in days), which is 90 days by default. Don't set this parameter to 0. This global variable is declared in common.py
 
+# Process
+
 ## step 1: collect
 
 Run collect.py to populate build_goldensource, build_groundsource, unused and oprhans tables.
@@ -61,13 +63,31 @@ Run minimize.py
 
 This will generate a file called silhouette.html, as well as a CSV containing cluster ID, SPN counts per cluster, inner silhouette, outer silhouette, and de-escalation score.
 
-# De-escalating
+# De-escalation
 
-## Customize role definitions
+## customize role definitions
 
 investigate_cluster.py will give you a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
 This will help you reshape (or create) built-in role definitions, clusterwide.
 
+## fine-tuning (clusterwide, not per SPN!)
 
+Most of ground truth permissions operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group, subscription, or, whenever possible, resource group level.
+
+If you are ready to customize cluster roles, my recommendation is two split each cluster roles into three parts:
+
+- write/delete roles (W)
+- action roles (A)
+- read roles (R)
+
+  This splitting aligns with how Azure RBAC manages permissions.
+
+  For each cluster and for each part (W,A,R), you should decide the highest permissible scope.
+
+A cluster grouping landing zone management SPNs might need W roles at the management group level, while a cluster grouping application managed identities might need W roles at the resource group level, A role at the subscription level, and R role at the management group level.
+
+Adding this W/A/R fine-tuning layer to each cluster must be done manually today. It is not a big deal since we don't need to do that for every single SPN (we reason at cluster level).
+
+Clusters fine tuning will increase clusters inner scores, thus decreasing the global de-escalation effort.
 
 
