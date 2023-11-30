@@ -17,6 +17,9 @@ run_goldensource = os.getenv(f"{account}_run_golden")
 orphans = os.getenv(f"{account}_orphans")
 unused = os.getenv(f"{account}_unused")
 run_partition=os.getenv('run_partition')
+
+logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
+
 membership={}
 warpermdict={}
 dstamp=datetime.now().strftime("%y%m%d")
@@ -1351,6 +1354,6 @@ print("golden source run table",run_goldensource)
 print("unused",unused)
 print("orphans",orphans)
 timeNow=datetime.today().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-timeBack=(datetime.today()-timedelta(days=90)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+timeBack=(datetime.today()-timedelta(days=logsRetention)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 print("time now:",timeNow)
 print("time back:",timeBack)
