@@ -96,4 +96,7 @@ Adding this W/A/R fine-tuning layer to each cluster must be done manually for no
 
 This clusters fine tuning will increase clusters inner scores, thus decreasing the global de-escalation effort.
 
+## A word on the reward...
+
+You will end up with **only as many custom SPN role definitions as clusters**, heopfully meaning somewhre between 10 to 50 role definitions, depending of the complexity of your operating model. 
 
