@@ -98,5 +98,7 @@ This clusters fine tuning will increase clusters inner scores, thus decreasing t
 
 ## A word on the reward...
 
-You will end up with **only as many custom SPN role definitions as clusters**, heopfully meaning somewhre between 10 to 50 role definitions, depending of the complexity of your operating model. 
+You will end up with **only as many custom SPN role definitions as clusters**, hopefully meaning somewhre between 10 to 50 role definitions, depending of the complexity of your operating model. 
+
+Much more manageable than the usual bunch of nested groups with a mix up of haphazardly attached built-in and custom roles.
 
