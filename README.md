@@ -6,7 +6,7 @@
 
 Silhouette runs through all your SPNs and groups them into cluster. For each cluster, it pulls the actual Azure RBAC permissions from Entra and compares them to Azure Activity logs in a Log Analytics Workspace.
 
-For each cluster, Silhouette provide 3 keys metrics:
+For each cluster, Silhouette provide 3 keys scores calculated from a distance function called the Silhouette metrics:
 - Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
 - De-escalation reward (green): the difference between the two scores.
@@ -19,7 +19,7 @@ De-escalation reward lets you quickly determine which cluster to tackle in prior
 
 ## De-escalation reward hierarchy
 
-The reward ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
+The ranking ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
@@ -49,15 +49,17 @@ You may also wish to adjust logsRetention, the Log Analytics retention parameter
 
 # Process
 
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.png" width="40%">
+
 ## step 1: collect
 
 Run collect.py to populate build_goldensource, build_groundsource, unused and oprhans tables.
 
-Warning: due to Azure throttling, this step takes a long time. Typically 8 to 12 hours in a typical production environment whith thousands of SPNs.
+Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20 hours in a typical production environment whith thousands of SPNs.
 
 ## step 2: machine learning
 
-Run clusterize.py to group SPNs into clusters. This only takes a few seconds.
+Run clusterize.py to group SPNs into similarity clusters. This only takes a few seconds.
 
 ## step 3: calculate and visualize silhouette scores
 
@@ -82,14 +84,16 @@ If you are ready to customize cluster roles, my recommendation is two split each
 - action roles (A)
 - read roles (R)
 
-  This splitting aligns with how Azure RBAC manages permissions.
+This splitting aligns with how Azure RBAC manages permissions.
 
-  For each cluster and for each part (W,A,R), you should decide the highest permissible scope.
+For each cluster and for each part (W,A,R), you :
+1) remove all wildcards, and replace them with what Silhouette found in Log Analytics
+2) decide the highest permissible scope
 
 A cluster grouping landing zone management SPNs might need W roles at the management group level, while a cluster grouping application managed identities might need W roles at the resource group level, A role at the subscription level, and R role at the management group level.
 
-Adding this W/A/R fine-tuning layer to each cluster must be done manually today. It is not a big deal since we don't need to do that for every single SPN (we reason at cluster level).
+Adding this W/A/R fine-tuning layer to each cluster must be done manually for now. It is not a big deal since we don't need to do that for every single SPN (we reason at cluster level).
 
-Clusters fine tuning will increase clusters inner scores, thus decreasing the global de-escalation effort.
+This clusters fine tuning will increase clusters inner scores, thus decreasing the global de-escalation effort.
 
 
