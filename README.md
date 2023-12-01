@@ -49,7 +49,7 @@ You may also wish to adjust logsRetention, the Log Analytics retention parameter
 
 # Process
 
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.png" width="40%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.jpeg" width="40%">
 
 ## step 1: collect
 
