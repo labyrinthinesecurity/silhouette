@@ -7,7 +7,7 @@
 Silhouette runs through all your SPNs and groups them into cluster. For each cluster, it pulls the actual Azure RBAC permissions from Entra and compares them to Azure Activity logs in a Log Analytics Workspace.
 
 For each cluster, Silhouette provide 3 keys scores calculated from a distance function called the Silhouette metrics:
-- Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
+-Desired score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
 - De-escalation reward (green): the difference between the two scores.
 
@@ -43,7 +43,7 @@ To get started, you must set a few environment variables which are loaded into c
 - build_goldensource: name of an Azure table in the account, where the golden source will be stored (azure RBAC roles and perms)
 - run_goldensource: name of an Azure table in the account, from where the golden source will be read (for analytics)
 
-The first time you run silhouette, you don't have a run_goldensource and you don't have a run_groundsource.
+The first time you run silhouette (step 1 below), you don't have a run_goldensource and you don't have a run_groundsource.
 
 You may also wish to adjust logsRetention, the Log Analytics retention parameter (in days), which is 90 days by default. Don't set this parameter to 0. This global variable is declared in common.py
 
@@ -53,7 +53,7 @@ You may also wish to adjust logsRetention, the Log Analytics retention parameter
 
 ## step 1: collect
 
-Run collect.py to populate build_goldensource, build_groundsource, unused and oprhans tables.
+Run collect.py to populate build_goldensource, build_groundsource, unused and orphans tables.
 
 Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20 hours in a typical production environment whith thousands of SPNs.
 
@@ -65,7 +65,7 @@ Run clusterize.py to group SPNs into similarity clusters. This only takes a few 
 
 Run minimize.py
 
-This will generate a file called silhouette.html, as well as a CSV containing cluster ID, SPN counts per cluster, inner silhouette, outer silhouette, and de-escalation score.
+This will generate a file called silhouette.html, as well as a CSV containing cluster ID, SPN counts per cluster, desired silhouette, outer silhouette, and de-escalation score.
 
 # De-escalation
 
@@ -73,6 +73,8 @@ This will generate a file called silhouette.html, as well as a CSV containing cl
 
 investigate_cluster.py will give you a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
 This will help you reshape (or create) built-in role definitions, clusterwide.
+
+It will also give you a proposed set of minimized role definitions for your cluster. These are used to calculate the desired silhouette of the cluster.
 
 ## fine-tuning (clusterwide, not per SPN!)
 
@@ -88,17 +90,15 @@ This splitting aligns with how Azure RBAC manages permissions.
 
 For each cluster and for each part (W,A,R), you :
 1) remove all wildcards, and replace them with what Silhouette found in Log Analytics
-2) decide the highest permissible scope
+2) decide the highest permissible scope (RG? ideally.)
 
 A cluster grouping landing zone management SPNs might need W roles at the management group level, while a cluster grouping application managed identities might need W roles at the resource group level, A role at the subscription level, and R role at the management group level.
 
-Adding this W/A/R fine-tuning layer to each cluster must be done manually for now. It is not a big deal since we don't need to do that for every single SPN (we reason at cluster level).
-
-This clusters fine tuning will increase clusters inner scores, thus decreasing the global de-escalation effort.
+The script investigate_cluter.py does this W/A/R fine-tuning layer for you, but it MUST be reviewed manually, because it is not 100% acurate.
 
 ## A word on the reward...
 
-You will end up with **only as many custom SPN role definitions as clusters**, hopefully meaning somewhre between 10 to 50 role definitions, depending of the complexity of your operating model. 
+You will end up with **only as many custom SPN role definitions as clusters**, hopefully meaning somewhere between 10 to 50 role definitions, depending of the complexity of your operating model. 
 
 Much more manageable than the usual bunch of nested groups with a mix up of haphazardly attached built-in and custom roles.
 
