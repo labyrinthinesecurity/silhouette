@@ -2,6 +2,7 @@ import os,requests,sys,re
 import json,urllib.request
 import logging,time,uuid
 from datetime import datetime,timedelta
+from z3 import *
 import functools
 print = functools.partial(print, flush=True) 
 
@@ -26,13 +27,13 @@ dstamp=datetime.now().strftime("%y%m%d")
 
 silhouette={
         'superadmin': {
-            '0': 0,
-            '1': 950,
-            '2': 900,
-            '3': 850,
-            '4': 800,
-            '6': 750,
-            '8': 700,
+            '0': 0,     # none
+            '1': 950,   # tenant
+            '2': 900,   # mgmt group
+            '3': 850,   # subscription
+            '4': 800,   # RG
+            '6': 750,   # resource
+            '8': 700,   # subresource
             },
          'write/delete': {
             '0': 0,
@@ -80,6 +81,14 @@ silhouette={
             '8': 2
          }
         }
+
+permSort=DeclareSort('permission')
+
+def addPerm(prm):
+  gprm="_"+prm
+  globals()[gprm]=None
+  gprm=Const(prm,permSort)
+  return gprm
 
 def get_token(resource):
     data_body = (
@@ -414,7 +423,7 @@ AzureActivity
 '''
     query=query[:-1]+principalId
     query=query+'''"
-| where not(ActivityStatusValue in ("Failure","Failed"))
+| where not(ActivityStatusValue in ("Failure","Failed","Success"))
 | project TimeGenerated,Authorization_d.action,Authorization_d.evidence.role,Authorization_d.scope,Authorization_d.evidence.roleDefinitionId,Authorization_d.evidence.roleAssignmentId,Authorization_d.evidence.roleAssignmentScope,ActivityStatusValue
 '''
     api_url = f'https://api.loganalytics.io/v1/workspaces/{workspace_id}/query' 
@@ -434,12 +443,13 @@ AzureActivity
     response_data = json.loads(response.read())
     return response_data['tables'][0]['rows'],token
 
-def build_ground_truth(wid,principalId,display,sFrom,sTo,token,save):
+def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
+  actionXscope={}
   row=get_row(account,run_goldensource,run_partition,principalId)
   if row is None or len(row)==0:
-    if save:
+    if verbose:
       print("empty row")
-    return None,False,None,None,token 
+    return None,False,None,None,None,token 
   gsource={}
   pld=json.loads(row[0]['Payload'])
   gsource['war']=pld['war']
@@ -453,10 +463,10 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,save):
   goldenroles={}
   payload,token=fetch_logs_by_id(wid,principalId,sFrom,sTo,token)
   if payload is None:
-    if save:
+    if verbose:
       print(" no activity")
-    return None,False,None,None,token 
-  if save:
+    return None,False,None,None,None,token 
+  if verbose:
     print(" logs:",len(payload))
   super_classes={}
   super_res=set([])
@@ -488,6 +498,24 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,save):
       groundroles[roleId]['name']=aP[2]
       groundroles[roleId]['actions']=set([])
     action=aP[1].lower()
+    war=classify_war_permission(action,8,False)
+    wcl=None
+    if war[0]=='write/delete':
+      wcl='W'
+    elif war[0]=='action':
+      wcl='A'
+    elif war[0]=='read':
+      wcl='R'
+    if wcl is not None:
+      ss,srg=subRGscope(aP[3])
+      if wcl not in actionXscope:
+        actionXscope[wcl]={}
+      if ss not in actionXscope[wcl]:
+        actionXscope[wcl][ss]={}
+      if srg not in actionXscope[wcl][ss]:
+        actionXscope[wcl][ss][srg]=[]
+      if action not in actionXscope[wcl][ss][srg]:
+        actionXscope[wcl][ss][srg].append(action)
     groundroles[roleId]['actions'].add(action)
   zperms=set()
   for aGR in groundroles:
@@ -555,9 +583,9 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,save):
   isUsed=False
   if len(war)>0 or len(da)>0:
     isUsed=True
-    if save==False:
+    if not verbose:
       store_row8(account,build_groundsource,build_partition,principalId,display,war,gsource['war'],Sresolution,Wresolution,Aresolution,gsource['Sresolution'],gsource['Wresolution'],gsource['Aresolution'],da,gsource['da'],json.dumps(ground))
-  return zperms,isUsed,gsource,ground,token
+  return zperms,isUsed,gsource,ground,actionXscope,token
 
 def compare_by_type(wid,principalType,sFrom,sTo):
   start=int(time.time())
@@ -598,10 +626,10 @@ authorizationresources
         continue
       else:
         print(aP,"found in AAD")
-        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,token=fetch_assignments_by_id(aP,save=False,token=token)
+        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,token=fetch_assignments_by_id(aP,verbose=False,token=token)
         print(aP," WAR is",a1)
         if a1 is not None:
-          zp,isUsed,source,ground,Ztoken=build_ground_truth(wid,aP,display,timeBack,timeNow,Ztoken,False)
+          zp,isUsed,source,ground,axs,Ztoken=build_ground_truth(wid,aP,display,timeBack,timeNow,Ztoken,False)
           if isUsed==False:
             store_row5u(account,unused,build_partition,aP,display,entity['accountEnabled'],entity['createdDateTime'],entity['servicePrincipalType'],json.dumps(source))
     else:
@@ -650,11 +678,11 @@ def fetch_resource_graph_results(query,token):
           all_results.extend(data['data'])
         if '$skipToken' in data:
           skip_token=data['$skipToken']
-          time.sleep(0.5)
+          time.sleep(0.15)
         elif 'resultTruncated' in data:
           if data['resultTruncated'] == "true":
             skip += top
-            time.sleep(0.5)
+            time.sleep(0.15)
           else:
             break
         else:
@@ -685,6 +713,14 @@ def extract_azure_resource_details(s):
     if s=='/':
       return ('/',None,None,None,None,None,None,None,None),1
     return None,None
+
+def subRGscope(s):
+   pattern = r'/subscriptions/(?P<subscription>[^/]+)/resourcegroups/(?P<rg>[^/]+)'
+   match = re.search(pattern, s.lower())
+   if match:
+     return match.group('subscription'),match.group('rg')
+   else:
+     return '',''
 
 class DisjointSet:
     def __init__(self, permissions):
@@ -720,7 +756,7 @@ def classify_war_permission(permission,resolution,verbose):
     else:
       rp=None
 
-    if "microsoft.support/" in lowperms or "microsoft.resourcehealth/" in lowperms or "microsoft.alertsmanagement/" in lowperms or "microsoft.insights/" in lowperms or "microsoft.operationalinsights/" in lowperms or "microsoft.operationsmanagement" in lowperms or "microsoft.consumption/" in lowperms or "microsoft.costmanagement/" in lowperms:
+    if "microsoft.support/" in lowperms or "microsoft.resourcehealth/" in lowperms or "microsoft.alertsmanagement/" in lowperms or "microsoft.consumption/" in lowperms or "microsoft.costmanagement/" in lowperms:
         if verbose:
           wpd=permission+":R:"+str(resolution)
           if wpd not in warpermdict:
@@ -964,7 +1000,7 @@ def entity_exists(principal_id, principal_type,token):
         return code,token, display_name,True,result
     return code,token, None,False,None
 
-def fetch_assignments_by_id(principalId,save,token):
+def fetch_assignments_by_id(principalId,verbose,token):
   starRoles={}
   query='''
 authorizationresources
@@ -1037,7 +1073,7 @@ authorizationresources
       groups.add(ag['id'])
     grcnt=0
     for gr in groups:
-      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,token=fetch_assignments_by_id(gr,save=False,token=token)   
+      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,token=fetch_assignments_by_id(gr,verbose=False,token=token)   
       if war is None:
         continue
       if "displayName" in ag:
@@ -1063,7 +1099,7 @@ authorizationresources
       if 'A' in da:
         assign_classes.update(gc)
       grcnt+=1
-  if save:
+  if verbose:
     print(d,"groups:",grcnt,end='')
   buf=d
   for aC in aR['set_combinedRole']:
@@ -1143,14 +1179,14 @@ authorizationresources
     jbuf['Wresolution']=min(write_res)
   if len(action_res)>0:
     jbuf['Aresolution']=min(action_res)
-  else:
+  if not verbose:
     store_row5(account,build_goldensource,build_partition,principalId,d,war,jbuf['Sresolution'],jbuf['Wresolution'],jbuf['Aresolution'],da,json.dumps(jbuf))
   return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,token
 
 def investigate_principalId(pk,principalId,verbose):
-  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,token=fetch_assignments_by_id(principalId,save=verbose,token=None)
-  ground_permset,isUsed,gsource,ground,token=build_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,save=verbose)
-  return golden_permset,ground_permset
+  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,token=fetch_assignments_by_id(principalId,verbose=verbose,token=None)
+  ground_permset,isUsed,gsource,ground,axs,token=build_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
+  return golden_permset,ground_permset,axs
 
 def build_silhouette(pk,render):
   import csv
@@ -1165,16 +1201,16 @@ def build_silhouette(pk,render):
     ff.close()
   buf='Cluster ID;SPN counts;Outer silhouette;Inner silhouette;Score\n'
   with open(f"silhouette_{run_partition}_{dstamp}.csv", 'w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=["Cluster ID","SPN counts","Outer silhouette","Inner silhouette","Score"])
+    writer = csv.DictWriter(file, fieldnames=["Cluster ID","SPN counts","Current silhouette"])
     writer.writeheader()
 #    for cl in range(cls):
     if True:
       cl=15
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,i=investigate_cluster(pk,cl,False)
-      row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Outer silhouette': i, 'Inner silhouette': o, 'Score': o-i}
+      c,o=investigate_cluster(pk,cl,False)
+      row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o}
       writer.writerow(row)
-      buf+=str(cl)+';'+str(c)+';'+str(i)+';'+str(o)+';'+str(o-i)+'\n' 
+      buf+=str(cl)+';'+str(c)+';'+str(o)+'\n' 
   with open("silhouette.html", 'w') as ff:
     ff.write(pre)
     ff.write(buf)
@@ -1195,6 +1231,13 @@ def investigate_cluster(pk,cluster,verbose):
           'unknown': 0,
           'read': 0 
           }
+  desired_sil={
+          'write/delete': 0,
+          'action': 0,
+          'none': 0,
+          'unknown': 0,
+          'read':0
+          }
 
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
@@ -1204,15 +1247,34 @@ def investigate_cluster(pk,cluster,verbose):
   scluster=str(cluster)
   cntid=0
   counts=len(czc[scluster])
+  axsdict={}
+  sxadict={}
+  p2n={}
   for record in czc[scluster]:
     name,pid=record['Name'].split('(')
     pid=pid[:-1]
-    gop,grp=investigate_principalId(pk,pid,verbose)
+    gop,grp,axs=investigate_principalId(pk,pid,verbose)
+    axsdict[pid]=axs
+    p2n[pid]=name
+    for aw in axs:
+      if aw not in sxadict:
+        sxadict[aw]={}
+      for ax in axs[aw]:
+        if ax not in sxadict[aw]:
+          sxadict[aw][ax]={}
+        for ar in axs[aw][ax]:
+          if ar not in sxadict[aw][ax]:
+            sxadict[aw][ax][ar]={}
+          if pid not in sxadict[aw][ax][ar]:
+            sxadict[aw][ax][ar][pid]=[]
+          for asc in axs[aw][ax][ar]:
+            if asc not in sxadict[aw][ax][ar][pid]:
+              sxadict[aw][ax][ar][pid].append(asc)
     if gop is None:
       continue
     if grp is None:
       continue
-    time.sleep(0.2)
+#    time.sleep(0.1)
     cntid+=1
     for g in gop:
       if g not in golden_counts:
@@ -1254,15 +1316,242 @@ def investigate_cluster(pk,cluster,verbose):
     cl,res,pr=g.split(':')
     if verbose:
       print(g,cl,res)
-    if cl=='write/delete' or cl=='action' or cl=='read':
-      if silhouette[cl][str(res)]>inner_sil[cl]:
-        inner_sil[cl]=silhouette[cl][str(res)]
-  innerscore=inner_sil['write/delete']+inner_sil['action']+inner_sil['read']
-  score=outerscore-innerscore
-  if verbose:
-    print("inner silhouette= ",innerscore)
-    print("silhouette score=",score)
-  return counts,outerscore,innerscore
+    maxSubs={
+            'W': 0,
+            'A': 0,
+            'R': 0}
+    maxRGs={
+            'W': 0,
+            'A': 0,
+            'R': 0}
+    strategy={
+            'W': '',
+            'A': '',
+            'R': ''}
+    ards={}
+    parent_sets={}
+  if True:
+    for nm in axsdict:
+      ards[nm]={
+              'MG': [],
+              'SUB': [],
+              'RG': []
+              }
+      parent_sets[nm]={
+              'MG': [],
+              'SUB': [],
+              'RG': []
+      }
+      for aw in axsdict[nm]:
+        subcnt=len(axsdict[nm][aw])
+        if subcnt>maxSubs[aw]:
+          maxSubs[aw]=subcnt
+        for ss in axsdict[nm][aw]:
+          rgcnt=len(axsdict[nm][aw][ss])
+          if rgcnt>maxRGs[aw]:
+            maxRGs[aw]=rgcnt
+    for aw in ['W','A','R']:
+      if maxSubs[aw]>=8:
+        strategy[aw]='MG'
+      else:
+        if maxRGs[aw]>=4:
+          strategy[aw]='SUB'
+        elif maxRGs[aw]>0:
+          strategy[aw]='RG'
+        else:
+          strategy[aw]=None
+    print("STRATEGY",strategy)
+    print("max Subs:",maxSubs,"max RGs:",maxRGs)
+    ard={}
+    ard['Actions']={
+              'RG': set(),
+              'SUB': set(),
+              'MG': set()
+    }
+    desired={
+              'RG': set(),
+              'SUB': set(),
+              'MG': set()
+    }
+    for aw in ['W','A','R']:
+      if strategy[aw] is None:
+        continue
+      if strategy[aw]=='RG':
+        for ss in sxadict[aw]: 
+          for rg in sxadict[aw][ss]:
+            ard['Actions']['RG']=set()
+            for nm in sxadict[aw][ss][rg]:
+              for an in sxadict[aw][ss][rg]:
+                if an==nm:
+                  for ac in sxadict[aw][ss][rg][an]:
+                    # Local R actions are absorbed by local A actions
+                    if aw=='R' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                      pass
+                    # Local R and A actions are absorbed by local W actions
+                    elif aw!='W' and strategy['W'] is not None and strategy['W']=='RG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
+                      pass
+                    else:
+                      # Local W actions cannot be absorbed by an upper authority. So we add them. 
+                      ard['Actions']['RG'].add(ac)
+#                      else:
+                        # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
+#                        pass
+                  # Local W absorbs local A actions (so RG actions)
+                  if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                    for ac in sxadict['A'][ss][rg][an]:
+                      ard['Actions']['RG'].add(ac)
+                  # Local W and local A absorb local R actions
+                  if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
+                    for ac in sxadict['R'][ss][rg][an]:
+                      ard['Actions']['RG'].add(ac)
+            if len(ard['Actions']['RG'])>0:
+              ards[nm]['RG'].append(sorted(list(ard['Actions']['RG'])))
+              parent_sets[nm]['RG'].append(ard['Actions']['RG'])
+      elif strategy[aw]=='SUB':
+        for ss in sxadict[aw]:
+          ard['Actions']['SUB']=set()
+          for rg in sxadict[aw][ss]:
+            for nm in sxadict[aw][ss][rg]:
+              for an in sxadict[aw][ss][rg]:
+                if an==nm:
+                  for ac in sxadict[aw][ss][rg][an]:
+                    # Local R actions are absorbed by local A actions
+                    if aw=='R' and strategy['A'] is not None and strategy['A']=='SUB' and ss in sxadict['A']:
+                      pass
+                    # Local R and A actions are absorbed by local W actions
+                    elif aw!='W' and strategy['W'] is not None and strategy['W']=='SUB' and ss in sxadict['W']:
+                      pass
+                    else:
+                      # Local W actions cannot be absorbed. We add them.
+                      ard['Actions']['SUB'].add(ac)
+                  # Local W absorbs local A actions and below (so SUB and RG)
+                  if aw=='W' and strategy['A'] is not None and  ss in sxadict['A'] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])) and an in sxadict['A'][ss][rg]:
+                    for rg1 in sxadict['A'][ss]:
+                      for an1 in sxadict['A'][ss][rg1]:
+                        if an1==nm:
+                          for ac in sxadict['A'][ss][rg1][an1]:
+                            ard['Actions']['SUB'].add(ac)
+                  # Local W and local A absorb local R actions (so SUB and RG)
+                  if aw!='R' and strategy['R'] is not None and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])) and ss in sxadict['R'] and an in sxadict['R'][ss][rg]:
+                    for rg1 in sxadict['R'][ss]:
+                      for an1 in sxadict['R'][ss][rg1]:
+                        if an1==nm:
+                          for ac in sxadict['R'][ss][rg1][an1]:
+                            ard['Actions']['SUB'].add(ac)
+                          break
+                  break
+          if len(ard['Actions']['SUB'])>0:
+            ards[nm]['SUB'].append(sorted(list(ard['Actions']['SUB'])))
+            parent_sets[nm]['SUB'].append(ard['Actions']['SUB'])
+      elif strategy[aw]=='MG':
+        ard['Actions']['MG']=set()
+        for ss in sxadict[aw]:
+          for rg in sxadict[aw][ss]:
+            for nm in sxadict[aw][ss][rg]:
+              for an in sxadict[aw][ss][rg]:
+                if an==nm:
+                  for ac in sxadict[aw][ss][rg][an]:
+                    # Local R actions are absorbed by local A actions
+                    if aw=='R' and strategy['A'] is not None and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                      pass
+                    # Local R and A actions are absorbed by local W actions
+                    elif aw!='W' and strategy['W'] is not None and strategy['W']=='MG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
+                      pass
+                    else:
+                      # Local W actions cannot be absorbed. We add them.
+                      ard['Actions']['MG'].add(ac)
+                  # Local W absorbs local A actions and below (so MG, SUB and RG)
+                  if aw=='W' and strategy['A'] is not None and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                    for ac in sxadict['A'][ss][rg][an]:
+                      ard['Actions']['MG'].add(ac)
+                  # Local W and local A absorb local R actions (so MG, SUB and RG)
+                  if aw!='R' and strategy['R'] is not None and strategy['R']=='MG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
+                    for ac in sxadict['R'][ss][rg][an]:
+                      ard['Actions']['MG'].add(ac)
+                  break
+        if len(ard['Actions']['MG'])>0:
+          ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
+          parent_sets[nm]['MG'].append(ard['Actions']['MG'])
+    print("parent sets")
+    for aP in parent_sets:
+      print(" ")
+      print("principal",aP,p2n[aP])
+      print(parent_sets[aP])
+      print("#")
+    for a in parent_sets:
+      print("OLD "+a)
+      for s in parent_sets[a]:
+        print("  scope",s)
+        for z in s:
+          print("  --",len(z),z)
+    desired_roles=reason_clusterwide(parent_sets)
+    print("desired roles")
+    print(desired_roles)
+    for s in [ 'MG', 'SUB', 'RG' ]:
+      if s=='MG':
+        resolution=1
+      elif s=='SUB':
+        resolution=2
+      elif s=='RG':
+         resolution=4
+      for pset in desired_roles[s]:
+        print(s,"pset",list(pset))
+        print(s,"desired s",desired[s])
+        partition_permissions(list(pset),resolution,desired[s])
+      print(" ")
+    print(" ")
+    print("DESIRED",desired)
+    desired_counts= {
+            'MG': {},
+            'SUB': {},
+            'RG': {}
+            }
+    for s in [ 'MG', 'SUB', 'RG' ]:
+      if s=='MG':
+        resolution=1
+      elif s=='SUB':
+        resolution=2
+      elif s=='RG':
+         resolution=4
+      for g in desired[s]:
+        if g not in desired_counts[s]:
+          desired_counts[s][g]=1
+        else:
+          desired_counts[s][g]+=1
+      for g in desired_counts[s]:
+        cl,res,pr=g.split(':')
+        if verbose:
+          print(g)
+        if cl=='write/delete':
+          if silhouette[cl][str(resolution)]> desired_sil['write/delete']:
+            desired_sil['write/delete']=silhouette[cl][str(resolution)]
+      for g in desired_counts[s]:
+        cl,res,pr=g.split(':')
+        scaled=desired_sil['write/delete']>=700
+        if cl=='action' or cl=='read':
+          if silhouette[cl][str(resolution)]>desired_sil[cl]:
+            desired_sil[cl]=silhouette[cl][str(resolution)]
+    desiredscore=desired_sil['write/delete']+desired_sil['action']+desired_sil['read']
+    print("desired score:",desiredscore)
+
+    sys.exit()
+
+#    print("Parent sets:")
+#    for a in nparent_sets:
+#      print("NEW "+a)
+#      print(nparent_sets[a])
+#      za=sorted(list(nparent_sets[a]))
+#      for z in za:
+#        print("--",len(z),z)
+#      print(" ")
+    print("Individual Role Definitions wihout EQ:",len(ards))
+    print(json.dumps(ards,indent=2))
+    print("Name X Scope X Action")
+    print(json.dumps(axsdict,indent=2))
+    print("...")
+    print("Scope X Name X Action")
+    print(json.dumps(sxadict,indent=2))
+  return counts,outerscore
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
@@ -1343,7 +1632,61 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
+#cluster_sample= { "ppid1": {'MG': set(), 'SUB': set(), 'RG': [{'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/write', 'microsoft.containerservice/managedclusters/listclusterusercredential/action'}] },
+#                  "ppid2": {'MG': set(), 'SUB': set(), 'RG': [{'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/write'}, {'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/read'}] }
+#        }
 
+def reason_clusterwide(pset):
+  sol=Solver()
+  roles={
+    'MG': [],
+    'SUB': [],
+    'RG': []
+  }
+  for scope in [ 'MG', 'SUB', 'RG']:
+    sol.push()
+    print(" ")
+    print("scope: ",scope)
+    for pid in pset:
+      for scopeset in pset[pid][scope]:
+        cnt=-1
+        print(pid,scopeset)
+        for perm in scopeset:
+          cnt+=1
+#          print(pid,scope,scopeset,perm)
+          if cnt==0:
+            classRepresentative=addPerm(perm)
+            sol.add(classRepresentative!=NOPERM)
+          else:
+            z3perm=addPerm(perm)
+            sol.add(z3perm==classRepresentative)
+    localClasses={}
+    if sol.check()==sat:
+      mdl=sol.model()
+      for item in mdl:
+        if str(item)!='No perm':
+          foo=str(mdl[item]).split('val!')
+          equivClass=int(foo[1])
+          sec=str(foo[1])
+          if sec not in localClasses:
+            localClasses[sec]=set()
+          localClasses[sec].add(str(item))
+          print("I",item,equivClass)
+    for alc in localClasses:
+      roles[scope].append(localClasses[alc])
+    sol.pop()
+  return roles
+
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG': [{'a'}, {'b', 'c'}, {'h'}]},
+                  "p2": {'MG': set(), 'SUB': set(), 'RG': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}]},
+                  "p3": {'MG': set(), 'SUB': set(), 'RG': [{'b'}, {'f', 'a'}, {'h'}]}
+                }
+
+NOPERM=addPerm('No perm')
+
+#desired_roles=reason_clusterwide(cluster_sample)
+#print(desired_roles)
+#sys.exit()
 build_partition=new_partition()
 print("build partition",build_partition)
 print("run partition",run_partition)
