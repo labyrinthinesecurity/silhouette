@@ -8,7 +8,7 @@ Silhouette runs through all your SPNs and groups them into cluster. For each clu
 
 For each cluster, Silhouette provide 3 keys scores calculated from a distance function called the Silhouette metrics:
 - Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
-- Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) to the SPNs in the cluster
+- Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) granted to SPNs in the cluster
 - De-escalation reward (green): the difference between the two scores.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG" width="50%">
