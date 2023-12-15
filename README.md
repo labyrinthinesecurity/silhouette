@@ -4,14 +4,16 @@
 
 ## introduction
 
-Silhouette runs through all your SPNs and groups them by similarity into cluster. This grouping is performed using machine learning.
+Silhouette runs through all your SPNs and groups them by similarity into clusters. This grouping is performed using machine learning.
 
-Then, within each cluster, it pulls the actual Azure RBAC permissions of all SPNs from Azure Entra and compares them to Azure Activity logs.
+Then, within each cluster, it pulls the actual Azure RBAC permissions of all SPNs from Azure Entra and compares them to Azure Activity logs. 
 
-For each cluster, Silhouette provide 3 keys scores calculated from a distance function called the Silhouette metrics:
+From that analysis, Silhouette provide 3 per-cluster indicators:
 - Desired score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) granted to the SPNs in the cluster
 - De-escalation reward (green): the difference between the two scores.
+
+These indicators are generated with the help of a new distance metric called the *silhouette metric*.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG" width="50%">
 
@@ -19,9 +21,13 @@ De-escalation reward lets you quickly determine which cluster to tackle in prior
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png" width="50%">
 
+Finally, Silhouette suggests per-cluster role definitions and role assignements that lets you reach the desired score.
+
 ## De-escalation reward hierarchy
 
-The ranking ranges from 0 (cluster has no rights at all) to 950 (cluster is Tenant admin). It obeys a strict hierarchy which allows to make accurate distance measurements between golden source and ground truth.
+The silhouette metric calculates the distance of each cluster to the origin. The distance ranges from 0 (cluster has no rights at all) at the origin to 999 (cluster is Tenant admin). Mathematical metrics obey a strict hierarchy which allows to make accurate distance measurements between cluster permissions. 
+
+By measuring the golden source permissions of a cluster to the origin and its ground source permissions to the origin, the triangular inequality allows us to determine the distance between golden source and ground truth. This distance is precisely the deescalation effort.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
@@ -63,11 +69,11 @@ Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20
 
 Run clusterize.py to group SPNs into similarity clusters. This only takes a few seconds.
 
-## step 3: calculate and visualize silhouette scores
+## step 3: calculate and visualize current and desired silhouettes
 
 Run minimize.py
 
-This will generate a file called silhouette.html, as well as a CSV containing cluster ID, SPN counts per cluster, desired silhouette, outer silhouette, and de-escalation score.
+This will generate a bar chart file called silhouette_{name_of_your_run_partition}.html, as well as a CSV containing cluster ID, SPN counts per cluster, desired silhouette, current silhouette, and de-escalation reward.
 
 # De-escalation
 
