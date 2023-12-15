@@ -4,7 +4,9 @@
 
 ## introduction
 
-Silhouette runs through all your SPNs and groups them into cluster. For each cluster, it pulls the actual Azure RBAC permissions from Entra and compares them to Azure Activity logs in a Log Analytics Workspace.
+Silhouette runs through all your SPNs and groups them by similarity into cluster. This grouping is performed using machine learning.
+
+Then, within each cluster, it pulls the actual Azure RBAC permissions of all SPNs from Azure Entra and compares them to Azure Activity logs.
 
 For each cluster, Silhouette provide 3 keys scores calculated from a distance function called the Silhouette metrics:
 - Desired score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
