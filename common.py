@@ -1080,7 +1080,7 @@ authorizationresources
         gdn=ag['displayName']
       else:
         gdn=''
-      print("  group ",gr,gdn)
+#      print("  group ",gr,gdn)
       permset.update(pset)
       combined+=cbr 
       super_classes.update(sc)
@@ -1099,8 +1099,8 @@ authorizationresources
       if 'A' in da:
         assign_classes.update(gc)
       grcnt+=1
-  if verbose:
-    print(d,"groups:",grcnt,end='')
+#  if verbose:
+#    print(d,"groups:",grcnt,end='')
   buf=d
   for aC in aR['set_combinedRole']:
     actions=json.loads(aC['actions'])
@@ -1199,19 +1199,17 @@ def build_silhouette(pk,render):
   with open("html_scores_post.skeleton", 'r') as ff:
     post=ff.read()
     ff.close()
-  buf='Cluster ID;SPN counts;Outer silhouette;Inner silhouette;Score\n'
+  buf='Cluster ID;SPN counts;Current silhouette;Desired silhouette;Score\n'
   with open(f"silhouette_{run_partition}_{dstamp}.csv", 'w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=["Cluster ID","SPN counts","Current silhouette"])
+    writer = csv.DictWriter(file, fieldnames=["Cluster ID","SPN counts","Current silhouette","Desired silhouette","Effort"])
     writer.writeheader()
-#    for cl in range(cls):
-    if True:
-      cl=15
+    for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o=investigate_cluster(pk,cl,False)
-      row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o}
+      c,o,d=investigate_cluster(pk,str(cl),False)
+      row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
-      buf+=str(cl)+';'+str(c)+';'+str(o)+'\n' 
-  with open("silhouette.html", 'w') as ff:
+      buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
+  with open(f"silhouette_{run_partition}_{dstamp}.html", 'w') as ff:
     ff.write(pre)
     ff.write(buf)
     ff.write(post)
@@ -1274,7 +1272,6 @@ def investigate_cluster(pk,cluster,verbose):
       continue
     if grp is None:
       continue
-#    time.sleep(0.1)
     cntid+=1
     for g in gop:
       if g not in golden_counts:
@@ -1288,10 +1285,12 @@ def investigate_cluster(pk,cluster,verbose):
         ground_counts[g]+=1
   if cntid==0:  # empty cluster... weird!
     return
+  if verbose:
+    print("Current permissions from Azure Entra (golden source):")
   for g in golden_counts:
     cl,res,pr=g.split(':')
     if verbose:
-      print(g)
+      print("  ",g)
     if cl=='superadmin':
       if silhouette[cl][str(res)]> outer_sil['write/delete']:
         outer_sil['write/delete']=silhouette[cl][str(res)]
@@ -1310,8 +1309,9 @@ def investigate_cluster(pk,cluster,verbose):
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
   if verbose:
-    print("outer silhouette= ",outerscore) 
-    print("...")
+    print("Current silhouette= ",outerscore) 
+    print("")
+    print("Ground permissions from Azure activity logs (ground truth):")
   for g in ground_counts:
     cl,res,pr=g.split(':')
     if verbose:
@@ -1360,8 +1360,8 @@ def investigate_cluster(pk,cluster,verbose):
           strategy[aw]='RG'
         else:
           strategy[aw]=None
-    print("STRATEGY",strategy)
-    print("max Subs:",maxSubs,"max RGs:",maxRGs)
+#    print("STRATEGY",strategy)
+#    print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
     ard['Actions']={
               'RG': set(),
@@ -1472,21 +1472,14 @@ def investigate_cluster(pk,cluster,verbose):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-    print("parent sets")
-    for aP in parent_sets:
-      print(" ")
-      print("principal",aP,p2n[aP])
-      print(parent_sets[aP])
-      print("#")
-    for a in parent_sets:
-      print("OLD "+a)
-      for s in parent_sets[a]:
-        print("  scope",s)
-        for z in s:
-          print("  --",len(z),z)
+#    print("parent sets")
+#    for aP in parent_sets:
+#      print("  principal",aP,p2n[aP])
+#      print("  ..",parent_sets[aP])
+#    print(" ")
     desired_roles=reason_clusterwide(parent_sets)
-    print("desired roles")
-    print(desired_roles)
+#    print("desired roles")
+#    print(desired_roles)
     for s in [ 'MG', 'SUB', 'RG' ]:
       if s=='MG':
         resolution=1
@@ -1495,12 +1488,11 @@ def investigate_cluster(pk,cluster,verbose):
       elif s=='RG':
          resolution=4
       for pset in desired_roles[s]:
-        print(s,"pset",list(pset))
-        print(s,"desired s",desired[s])
+#        print(s,"pset",list(pset))
+#        print(s,"desired s",desired[s])
         partition_permissions(list(pset),resolution,desired[s])
-      print(" ")
-    print(" ")
-    print("DESIRED",desired)
+#      print(" ")
+#    print(" ")
     desired_counts= {
             'MG': {},
             'SUB': {},
@@ -1520,8 +1512,8 @@ def investigate_cluster(pk,cluster,verbose):
           desired_counts[s][g]+=1
       for g in desired_counts[s]:
         cl,res,pr=g.split(':')
-        if verbose:
-          print(g)
+#        if verbose:
+#          print(g)
         if cl=='write/delete':
           if silhouette[cl][str(resolution)]> desired_sil['write/delete']:
             desired_sil['write/delete']=silhouette[cl][str(resolution)]
@@ -1532,26 +1524,18 @@ def investigate_cluster(pk,cluster,verbose):
           if silhouette[cl][str(resolution)]>desired_sil[cl]:
             desired_sil[cl]=silhouette[cl][str(resolution)]
     desiredscore=desired_sil['write/delete']+desired_sil['action']+desired_sil['read']
-    print("desired score:",desiredscore)
-
-    sys.exit()
-
-#    print("Parent sets:")
-#    for a in nparent_sets:
-#      print("NEW "+a)
-#      print(nparent_sets[a])
-#      za=sorted(list(nparent_sets[a]))
-#      for z in za:
-#        print("--",len(z),z)
-#      print(" ")
-    print("Individual Role Definitions wihout EQ:",len(ards))
-    print(json.dumps(ards,indent=2))
-    print("Name X Scope X Action")
-    print(json.dumps(axsdict,indent=2))
-    print("...")
-    print("Scope X Name X Action")
-    print(json.dumps(sxadict,indent=2))
-  return counts,outerscore
+    print("Desired silhouette=",desiredscore)
+    print("")
+    print("Desired role assignments")
+    print(desired)
+#    print("Individual Role Definitions wihout EQ:",len(ards))
+#    print(json.dumps(ards,indent=2))
+#    print("Name X Scope X Action")
+#    print(json.dumps(axsdict,indent=2))
+#    print("...")
+#    print("Scope X Name X Action")
+#    print(json.dumps(sxadict,indent=2))
+  return counts,outerscore,desiredscore
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
@@ -1615,11 +1599,8 @@ def ml_ingest():
       if len(rps_value)>0:
         unique_rps.add(rps_value)
 
-  # Sort unique_rps for consistent column ordering
   unique_rps = sorted(unique_rps)
-  # Prepare CSV file headers
   headers = ['Name', 'GWAR', 'SWAR','GWResolution','GAResolution', 'SSResolution','SWResolution','SAResolution' ] + list(unique_rps)
-  # Create and write to CSV file
   with open(f"{run_partition}_{dstamp}.csv", 'w', newline='') as file:
     writer = csv.DictWriter(file, fieldnames=headers)
     writer.writeheader()
@@ -1645,15 +1626,12 @@ def reason_clusterwide(pset):
   }
   for scope in [ 'MG', 'SUB', 'RG']:
     sol.push()
-    print(" ")
-    print("scope: ",scope)
     for pid in pset:
       for scopeset in pset[pid][scope]:
         cnt=-1
         print(pid,scopeset)
         for perm in scopeset:
           cnt+=1
-#          print(pid,scope,scopeset,perm)
           if cnt==0:
             classRepresentative=addPerm(perm)
             sol.add(classRepresentative!=NOPERM)
@@ -1671,7 +1649,6 @@ def reason_clusterwide(pset):
           if sec not in localClasses:
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
-          print("I",item,equivClass)
     for alc in localClasses:
       roles[scope].append(localClasses[alc])
     sol.pop()
