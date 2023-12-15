@@ -21,4 +21,4 @@
     </tbody>
   </table>
   <script>
-    const csvData = `cluster;counts;outer;inner;score
+    const csvData = `cluster;counts;outer;desired;score
