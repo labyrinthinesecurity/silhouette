@@ -55,6 +55,21 @@ The first time you run silhouette (step 1 below), you don't have a run_goldensou
 
 You may also wish to adjust logsRetention, the Log Analytics retention parameter (in days), which is 90 days by default. Don't set this parameter to 0. This global variable is declared in common.py
 
+## known current limitations (work in progress)
+
+Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, the following are not captured:
+
+- Read actions (Azure Activity only captures write/delete and actions)
+- Data plane actions (Resources logs, aka daa plane actions, are not captured by Azure Activity)
+
+For now, permissions related to role assignments or role definitions (from the Microsoft.Authorizations resource provider) are being ignored. 
+
+Finally, permissions assigned at any scope below resource groups are being ignored.
+
+## how to overcome current limitations?
+
+For now, unsupported permissions must be added manually to any role definition proposed by Silhouette.
+
 # Process
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.jpeg" width="40%">
