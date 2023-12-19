@@ -468,6 +468,7 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
     return None,False,None,None,None,token 
   if verbose:
     print(" logs:",len(payload))
+  time.sleep(0.2)
   super_classes={}
   super_res=set([])
   write_delete_classes={}
@@ -1309,9 +1310,15 @@ def investigate_cluster(pk,cluster,verbose):
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
   if verbose:
+    with open(f"{cluster}_ground_permissions.json","w") as cgp:
+      cgp.write("[")
+      cgp.write(json.dumps(axsdict,indent=2))
+      cgp.write(",\n")
+      cgp.write(json.dumps(sxadict,indent=2))
+      cgp.write("]\n")
     print("Current silhouette= ",outerscore) 
     print("")
-    print("Ground permissions from Azure activity logs (ground truth):")
+    print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
   for g in ground_counts:
     cl,res,pr=g.split(':')
     if verbose:
@@ -1354,7 +1361,7 @@ def investigate_cluster(pk,cluster,verbose):
       if maxSubs[aw]>=8:
         strategy[aw]='MG'
       else:
-        if maxRGs[aw]>=4:
+        if maxRGs[aw]>=6:
           strategy[aw]='SUB'
         elif maxRGs[aw]>0:
           strategy[aw]='RG'
@@ -1379,6 +1386,7 @@ def investigate_cluster(pk,cluster,verbose):
       if strategy[aw]=='RG':
         for ss in sxadict[aw]: 
           for rg in sxadict[aw][ss]:
+            print("NEW RG set",rg)
             ard['Actions']['RG']=set()
             for nm in sxadict[aw][ss][rg]:
               for an in sxadict[aw][ss][rg]:
@@ -1393,19 +1401,23 @@ def investigate_cluster(pk,cluster,verbose):
                     else:
                       # Local W actions cannot be absorbed by an upper authority. So we add them. 
                       ard['Actions']['RG'].add(ac)
+                      print("  Case W: rg",rg,"add",ac)
 #                      else:
                         # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
 #                        pass
                   # Local W absorbs local A actions (so RG actions)
                   if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     for ac in sxadict['A'][ss][rg][an]:
+                      print("  Case W>A: rg",rg,"add",ac)
                       ard['Actions']['RG'].add(ac)
                   # Local W and local A absorb local R actions
                   if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                     for ac in sxadict['R'][ss][rg][an]:
+                      print("  Case W|A>R: rg",rg,"add",ac)
                       ard['Actions']['RG'].add(ac)
             if len(ard['Actions']['RG'])>0:
               ards[nm]['RG'].append(sorted(list(ard['Actions']['RG'])))
+              print("Parent set addition for rg",rg,ard['Actions']['RG'])
               parent_sets[nm]['RG'].append(ard['Actions']['RG'])
       elif strategy[aw]=='SUB':
         for ss in sxadict[aw]:
@@ -1472,14 +1484,12 @@ def investigate_cluster(pk,cluster,verbose):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-#    print("parent sets")
-#    for aP in parent_sets:
-#      print("  principal",aP,p2n[aP])
-#      print("  ..",parent_sets[aP])
-#    print(" ")
+    print("parent sets")
+    for aP in parent_sets:
+      print("  principal",aP,p2n[aP])
+      print("  ..",parent_sets[aP])
+    print(" ")
     desired_roles=reason_clusterwide(parent_sets)
-#    print("desired roles")
-#    print(desired_roles)
     for s in [ 'MG', 'SUB', 'RG' ]:
       if s=='MG':
         resolution=1
@@ -1523,11 +1533,11 @@ def investigate_cluster(pk,cluster,verbose):
         if cl=='action' or cl=='read':
           if silhouette[cl][str(resolution)]>desired_sil[cl]:
             desired_sil[cl]=silhouette[cl][str(resolution)]
-    desiredscore=desired_sil['write/delete']+desired_sil['action']+desired_sil['read']
+    desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
     print("Desired silhouette=",desiredscore)
     print("")
     print("Desired role assignments")
-    print(desired)
+    print(desired_roles)
 #    print("Individual Role Definitions wihout EQ:",len(ards))
 #    print(json.dumps(ards,indent=2))
 #    print("Name X Scope X Action")
@@ -1618,6 +1628,7 @@ def ml_ingest():
 #        }
 
 def reason_clusterwide(pset):
+  print("Reason clusterwide")
   sol=Solver()
   roles={
     'MG': [],
@@ -1629,7 +1640,7 @@ def reason_clusterwide(pset):
     for pid in pset:
       for scopeset in pset[pid][scope]:
         cnt=-1
-        print(pid,scopeset)
+        #print("PID",pid,"SCOPESET",scopeset)
         for perm in scopeset:
           cnt+=1
           if cnt==0:
@@ -1642,6 +1653,7 @@ def reason_clusterwide(pset):
     if sol.check()==sat:
       mdl=sol.model()
       for item in mdl:
+        #print("..reviewing item",item)
         if str(item)!='No perm':
           foo=str(mdl[item]).split('val!')
           equivClass=int(foo[1])
@@ -1649,8 +1661,11 @@ def reason_clusterwide(pset):
           if sec not in localClasses:
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
-    for alc in localClasses:
-      roles[scope].append(localClasses[alc])
+      print("local classes",localClasses)
+      for alc in localClasses:
+        roles[scope].append(localClasses[alc])
+    else:
+      print("reason clusterwide: UNSAT")
     sol.pop()
   return roles
 
