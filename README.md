@@ -57,10 +57,7 @@ You may also wish to adjust logsRetention, the Log Analytics retention parameter
 
 ## known current limitations (work in progress)
 
-Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, the following are not captured:
-
-- Read actions (Azure Activity only captures write/delete and actions)
-- Data plane actions (Resources logs, aka daa plane actions, are not captured by Azure Activity)
+Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, read actions are not captures. (Azure Activity only captures write/delete and actions)
 
 For now, permissions related to role assignments or role definitions (from the Microsoft.Authorizations resource provider) are being ignored. 
 
@@ -69,6 +66,12 @@ Finally, permissions assigned at any scope below resource groups are being ignor
 ## how to overcome current limitations?
 
 For now, unsupported permissions must be added manually to any role definition proposed by Silhouette.
+
+## What about the data plane?
+
+Resources logs, aka data plane actions, are not captured by Azure Activity. But there is a more important reason why data plane actions are not managed by Silhouette: it is because ranking such actions requires a deep understanding of the business value and the business requirements attached to the data. This value is highly customer dependent. 
+
+A traditional approach for dealing with data value is to reason in terms of availability, integrity, confidentiality and auditability. Silhouette is not able to understand these notions at the moment, so it is not able to rank data plane actions or to automate custom roles for the data plane.
 
 # Process
 
