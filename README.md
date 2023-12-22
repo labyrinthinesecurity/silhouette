@@ -77,15 +77,25 @@ A traditional approach for dealing with data value is to reason in terms of avai
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.jpeg" width="40%">
 
-## step 1: collect
+## step 1A: collect
+
+Set build_goldensource, build_groundsource, unused and orphans tables to empty tables in your azure storage account.
 
 Run collect.py to populate build_goldensource, build_groundsource, unused and orphans tables.
 
 Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20 hours in a typical production environment whith thousands of SPNs.
 
+## step 1B: prepare RUN
+
+Now that the build process is over, you may set run_goldensource and run_groundsource to the build_goldensource and build_groundsource tables, respectively.
+
+You should then set your build_goldensource and build_groundsource variables to othertables, to avoid accidental overwritting of the run tables if you run collect.py once again!
+
 ## step 2: machine learning
 
-Run clusterize.py to group SPNs into similarity clusters. This only takes a few seconds.
+Run clusterize.py to group SPNs into similarity clusters. This should take less than a minute.
+
+The script generates a CSV file to be consumed by minimize.py in step 3.
 
 ## step 3: calculate and visualize current and desired silhouettes
 
@@ -95,12 +105,24 @@ This will generate a bar chart file called silhouette_{name_of_your_run_partitio
 
 # De-escalation
 
-## customize role definitions
+## customize role definitions of a cluster
 
-investigate_cluster.py will give you a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
+Now pick a cluster ID from the above mentioned CSV and stick it to the function called in investigate_cluster.py
+
+For example, if the cluster ID you want to investigate has cluster ID 7, you should set the function as follows:
+
+```
+investigate_cluster(run_partition,"7",verbose=True)
+```
+
+Notice that the cluster ID is actually string "7", not number 7.
+
+Run investigate_cluster.py to stdout a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
 This will help you reshape (or create) built-in role definitions, clusterwide.
 
-It will also give you a proposed set of minimized role definitions for your cluster. These are used to calculate the desired silhouette of the cluster.
+On stdout, it will also give you a proposed set of minimized role definitions for your cluster. These are used to calculate the desired silhouette of the cluster.
+
+investigate_cluster.py will also generate a file called clustername_ground_permissions.json that will help you understand whih SPN in the cluster is producing which ground permission, and in which scope. In our example with cluster 7, the file generated is called 7_ground_permissions.json
 
 ## fine-tuning (clusterwide, not per SPN!)
 
