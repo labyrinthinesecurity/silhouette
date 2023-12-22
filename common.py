@@ -627,7 +627,7 @@ authorizationresources
         continue
       else:
         print(aP,"found in AAD")
-        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,token=fetch_assignments_by_id(aP,verbose=False,token=token)
+        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,token=token)
         print(aP," WAR is",a1)
         if a1 is not None:
           zp,isUsed,source,ground,axs,Ztoken=build_ground_truth(wid,aP,display,timeBack,timeNow,Ztoken,False)
@@ -1013,8 +1013,8 @@ authorizationresources
     | extend roleId = tostring(properties.roleDefinitionId)
     | join kind = inner (authorizationresources
     | where ['type'] has "roledefinitions"
-    | distinct tostring(properties.roleName), ['id'],tostring(properties.permissions[0].actions)) on $left.roleId == $right.['id']
-    | extend combinedRole = pack('role',tostring(properties_roleName),'scope',tostring(properties.scope),'actions',properties_permissions_0_actions,'ra',['id'],'rd', tostring(roleId) )
+    | distinct tostring(properties.roleName), ['id'],tostring(properties.permissions[0].actions),tostring(properties.permissions[0].dataactions),tostring(properties.permissions[0].notdataactions)) on $left.roleId == $right.['id']
+    | extend combinedRole = pack('role',tostring(properties_roleName),'scope',tostring(properties.scope),'actions',properties_permissions_0_actions,'dataactions',properties_permissions_0_actions,'notdataactions',properties_permissions_0_notdataactions,'ra',['id'],'rd', tostring(roleId) )
     | summarize make_set(combinedRole) by tostring(properties.principalType)
     | order by ['properties_principalType'] asc
 '''
@@ -1034,7 +1034,7 @@ authorizationresources
       print(principalId,"doesnt exist")
       orpartition=principalId[:2]
       store_row(account,orphans,orpartition,principalId,'')
-      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
+      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
   else:
     aR=results[0]
     code,token,display,exists,entity=entity_exists(principalId,aR['properties_principalType'],token=None)
@@ -1042,7 +1042,7 @@ authorizationresources
       print(principalId,aR['properties_principalType'],"doesnt exist")
       orpartition=principalId[:2]
       store_row(account,orphans,orpartition,principalId,'')
-      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
+      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
   combined=aR['set_combinedRole']
   if display:
     d=display
@@ -1066,6 +1066,8 @@ authorizationresources
   g0=None
   war=''
   permset=set()
+  dactions=set()
+  notdactions=set()
   if aR['properties_principalType'] in ['User','ServicePrincipal']:
     g0,token=get_groups_of(principalId,aR['properties_principalType'],token)
   if g0 and 'value' in g0:
@@ -1074,7 +1076,7 @@ authorizationresources
       groups.add(ag['id'])
     grcnt=0
     for gr in groups:
-      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,token=fetch_assignments_by_id(gr,verbose=False,token=token)   
+      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,dac,notdac,token=fetch_assignments_by_id(gr,verbose=False,token=token)   
       if war is None:
         continue
       if "displayName" in ag:
@@ -1082,6 +1084,10 @@ authorizationresources
       else:
         gdn=''
 #      print("  group ",gr,gdn)
+      if dac:
+        dactions.update(dac)
+      if notdac:
+        notdactions.update(notdac)
       permset.update(pset)
       combined+=cbr 
       super_classes.update(sc)
@@ -1107,6 +1113,12 @@ authorizationresources
     actions=json.loads(aC['actions'])
     scope=aC['scope']
     resource,resolution=extract_azure_resource_details(scope)
+    if len(aC['dataactions'])>0:
+      da=str(resolution)+':'+aC['dataactions']
+      dactions.add(da)
+    if len(aC['notdataactions'])>0:
+      nda=str(resolution)+':'+aC['notdataactions']
+      notdactions.add(nda)
     if not resource:
       print("UNKNOWN SCOPE:",scope)
       sys.exit()
@@ -1182,12 +1194,14 @@ authorizationresources
     jbuf['Aresolution']=min(action_res)
   if not verbose:
     store_row5(account,build_goldensource,build_partition,principalId,d,war,jbuf['Sresolution'],jbuf['Wresolution'],jbuf['Aresolution'],da,json.dumps(jbuf))
-  return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,token
+  return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,list(dactions),list(notdactions),token
 
 def investigate_principalId(pk,principalId,verbose):
-  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,token=fetch_assignments_by_id(principalId,verbose=verbose,token=None)
+  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,notdactions,token=fetch_assignments_by_id(principalId,verbose=verbose,token=None)
+  if war is None:
+    return None,None,None,None,None,None,None,None,None,None
   ground_permset,isUsed,gsource,ground,axs,token=build_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
-  return golden_permset,ground_permset,axs
+  return golden_permset,ground_permset,axs,da,super_res,write_res,action_res,read_res,dactions,notdactions
 
 def build_silhouette(pk,render):
   import csv
@@ -1249,10 +1263,39 @@ def investigate_cluster(pk,cluster,verbose):
   axsdict={}
   sxadict={}
   p2n={}
+  das=[]
+  dactions=set()
+  notdactions=set()
   for record in czc[scluster]:
     name,pid=record['Name'].split('(')
     pid=pid[:-1]
-    gop,grp,axs=investigate_principalId(pk,pid,verbose)
+    gop,grp,axs,da,sres,wres,ares,rres,dac,notdac=investigate_principalId(pk,pid,verbose)
+    if gop is None:
+      continue
+    if dac:
+      dactions.update(dac)
+    if notdac:
+      notdactions.update(notdac)
+    if sres and len(sres)>0:
+      msr=max(sres)
+    else:
+      msr=0
+    if wres and len(wres)>0:
+      mwr=max(wres)
+    else:
+      mwr=0
+    if ares and len(ares)>0:
+      mar=max(ares)
+    else:
+      mar=0
+    if rres and len(rres)>0:
+      mrr=max(rres)
+    else:
+      mrr=0
+    maxres=max(msr,mwr,mar,mrr)
+    #print(record,"SRES",sres,"WRES",wres,"ARES",ares,"RRES",rres,"MAXRES",maxres)
+    if len(da)>0:
+      das.append(pid)
     axsdict[pid]=axs
     p2n[pid]=name
     for aw in axs:
@@ -1286,18 +1329,34 @@ def investigate_cluster(pk,cluster,verbose):
         ground_counts[g]+=1
   if cntid==0:  # empty cluster... weird!
     return
+  if maxres>=6:
+    print("WARNING. Some resources have direct role assignments. Currently, Silhouette only supports role assignments to resource containers (MGs,subscriptions,RGs). Resource role assignments must be added manually to role definitions")
+  if len(dactions)>0 or len(notdactions)>0:
+    print("WARNING. Some cluster members have data plane actions or notActions. They are not managed by Silhouette and must be added manually to cluster/SPN role definition.")
+    for aa in dactions:
+       print("  dataActions:",aa)
+    for na in notdactions:
+       print("  notDataActions:",na)
+  if len(das)>0:
+    print("WARNING: the following principals have IAM role definitions or role assignments. These are not currently supported by Silhouette and must be added manually to cluster custom roles:")
+    for d in das:
+      print(p2n[d],d)
   if verbose:
-    print("Current permissions from Azure Entra (golden source):")
+    print("\nCurrent permissions from Azure Entra (golden source):")
+  someSuperAdmin=False
   for g in golden_counts:
     cl,res,pr=g.split(':')
     if verbose:
       print("  ",g)
     if cl=='superadmin':
+      someSuperAdmin=True
       if silhouette[cl][str(res)]> outer_sil['write/delete']:
         outer_sil['write/delete']=silhouette[cl][str(res)]
     elif cl=='write/delete':
       if silhouette[cl][str(res)]> outer_sil['write/delete']:
         outer_sil['write/delete']=silhouette[cl][str(res)]
+  if someSuperAdmin:
+    print("WARNING: some SPNs in this cluster are superadmins. Superadmins have implicit IAM role definitions and role assignments, these are not currently supported by Silhouette so they must be added manually to SPN superadmins custom roles.")
   for g in golden_counts:
     cl,res,pr=g.split(':')
     scaled=outer_sil['write/delete']>=700
@@ -1415,10 +1474,14 @@ def investigate_cluster(pk,cluster,verbose):
                     for ac in sxadict['R'][ss][rg][an]:
                       print("  Case W|A>R: rg",rg,"add",ac)
                       ard['Actions']['RG'].add(ac)
+                      if cluster=="20":
+                        print("artificially adding perm microsoft.network/routetables/write")
             if len(ard['Actions']['RG'])>0:
               ards[nm]['RG'].append(sorted(list(ard['Actions']['RG'])))
               print("Parent set addition for rg",rg,ard['Actions']['RG'])
               parent_sets[nm]['RG'].append(ard['Actions']['RG'])
+#              if cluster=="20":
+#                parent_sets[nm]['RG'].append({'microsoft.network/routetables/write'})
       elif strategy[aw]=='SUB':
         for ss in sxadict[aw]:
           ard['Actions']['SUB']=set()
@@ -1484,10 +1547,10 @@ def investigate_cluster(pk,cluster,verbose):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-    print("parent sets")
-    for aP in parent_sets:
-      print("  principal",aP,p2n[aP])
-      print("  ..",parent_sets[aP])
+#    print("parent sets")
+#    for aP in parent_sets:
+#      print("  principal",aP,p2n[aP])
+#      print("  ..",parent_sets[aP])
     print(" ")
     desired_roles=reason_clusterwide(parent_sets)
     for s in [ 'MG', 'SUB', 'RG' ]:
@@ -1623,12 +1686,8 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
-#cluster_sample= { "ppid1": {'MG': set(), 'SUB': set(), 'RG': [{'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/write', 'microsoft.containerservice/managedclusters/listclusterusercredential/action'}] },
-#                  "ppid2": {'MG': set(), 'SUB': set(), 'RG': [{'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/write'}, {'microsoft.documentdb/databaseaccounts/mongodbdatabases/collections/throughputsettings/read'}] }
-#        }
-
 def reason_clusterwide(pset):
-  print("Reason clusterwide")
+#  print("Reason clusterwide")
   sol=Solver()
   roles={
     'MG': [],
@@ -1661,7 +1720,7 @@ def reason_clusterwide(pset):
           if sec not in localClasses:
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
-      print("local classes",localClasses)
+#      print(scope,"local classes",localClasses)
       for alc in localClasses:
         roles[scope].append(localClasses[alc])
     else:
