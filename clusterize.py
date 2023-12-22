@@ -1,3 +1,10 @@
+#!/usr/bin/python3
+
+from common import *
+import pandas as pd
+from datetime import datetime
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
@@ -14,7 +21,7 @@ partition=os.getenv('run_partition')
 np.random.seed(42)
 #centroids=np.loadtxt('t0_centroids.csv',delimiter=',')
 dstamp=datetime.now().strftime("%y%m%d")
-print("Todays date timesamp is:",dstamp)
+print("Todays date timestamp is:",dstamp)
 
 data0 = pd.read_csv(f"{partition}_{dstamp}.csv")
 data = data0.drop('Name',axis=1)
@@ -60,8 +67,8 @@ data['cluster'] = kmeans.labels_
 
 result = data1.merge(data,left_index=True,right_index=True)
 # place first column and label at the end
-first_column = result.pop('Name')
-result['Name'] = first_column
+first_column = result.pop('Name') 
+result['Name'] = first_column      
 
 columns_to_drop.append('cluster')
 #print(columns_to_drop)
