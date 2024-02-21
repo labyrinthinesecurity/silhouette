@@ -57,11 +57,11 @@ You may also wish to adjust logsRetention, the Log Analytics retention parameter
 
 ## known current limitations (work in progress)
 
-Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, read actions are not captures. (Azure Activity only captures write/delete and actions)
+Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, read actions are not captured. (Azure Activity only captures write/delete and actions)
 
-For now, permissions related to role assignments or role definitions (from the Microsoft.Authorizations resource provider) are being ignored. 
+For now, roles related to role assignments or role definitions (from the Microsoft.Authorizations resource provider) are being ignored. 
 
-Finally, permissions assigned at any scope below resource groups are being ignored.
+Finally, roles assigned at any scope below resource groups are being ignored.
 
 ## how to overcome current limitations?
 
