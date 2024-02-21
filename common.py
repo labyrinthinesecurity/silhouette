@@ -757,7 +757,7 @@ def classify_war_permission(permission,resolution,verbose):
     else:
       rp=None
 
-    if "microsoft.support/" in lowperms or "microsoft.resourcehealth/" in lowperms or "microsoft.alertsmanagement/" in lowperms or "microsoft.consumption/" in lowperms or "microsoft.costmanagement/" in lowperms:
+    if "microsoft.insights/" in lowperms or "microsoft.support/" in lowperms or "microsoft.resourcehealth/" in lowperms or "microsoft.alertsmanagement/" in lowperms or "microsoft.consumption/" in lowperms or "microsoft.costmanagement/" in lowperms:
         if verbose:
           wpd=permission+":R:"+str(resolution)
           if wpd not in warpermdict:
@@ -787,27 +787,23 @@ def classify_war_permission(permission,resolution,verbose):
             warpermdict[wpd]=0
 #            print(permission,"S",resolution)
         return "superadmin",segments[0]
+    
+    if "microsoft.authorization/" in lowperms:
+      if "microsoft.authorization/denyassignments" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/elevateaccess" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/classicadministrators" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/roleassignments" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/roledefinitions" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/roleeligibilityschedule" in lowperms:
+        return "none",segments[0]
+      if "microsoft.authorization/rolemanagementpolic" in lowperms:
+        return "none",segments[0]
 
-    if "microsoft.authorization/denyassignments" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/elevateaccess" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/classicadministrators" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/roleassignments" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/roledefinitions" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/roleeligibilityschedule" in lowperms:
-        return "none",None
-
-    if "microsoft.authorization/rolemanagementpolic" in lowperms:
-        return "none",None
 
     if segments[-1:][0]=="*":
         if verbose:
@@ -843,7 +839,7 @@ def classify_war_permission(permission,resolution,verbose):
       if wpd not in warpermdict:
         warpermdict[wpd]=0
 #        print(permission,"U",resolution)
-    return "unknown",None
+    return "unknown",segments[0]
 
 def classify_da_permission(permission):
     lowperms = permission.lower()
@@ -964,8 +960,13 @@ def partition_permissions(permissions,resolution,zperms):
         cwp,rp=classify_war_permission(permission,resolution,True)
         zitem=cwp+":"+str(resolution)+":"+permission.lower()
         zperms.add(zitem)
-        if '*' in zitem:
-          stars.add(zitem)
+        if '*' in zitem and cwp!='read':
+          if rp:
+            print("MMM RP",zitem,cwp,rp)
+            stars.add(zitem)
+          else:
+            print("MMM no rp")
+            stars.add(zitem)
         war_root = war_sets[cwp].find(permission)
         war_classes[cwp].setdefault(war_root, set()).add(permission)
         if rp:
@@ -1090,6 +1091,8 @@ authorizationresources
         notdactions.update(notdac)
       permset.update(pset)
       combined+=cbr 
+      if sc is not None and len(sc)>0:
+        print("group __+__",sc)
       super_classes.update(sc)
       super_res.update(sr)
       write_delete_classes.update(wc)
@@ -1119,10 +1122,12 @@ authorizationresources
     if len(aC['notdataactions'])>0:
       nda=str(resolution)+':'+aC['notdataactions']
       notdactions.add(nda)
-    if not resource:
+    if not scope:
       print("UNKNOWN SCOPE:",scope)
       sys.exit()
     classes,rps,stars = partition_permissions(actions,resolution,permset)
+    if stars is not None and len(stars)>0:
+      print("STARS ",stars)
     for astar in stars:
       if astar not in starRoles:
         starRoles[astar]=set([])
@@ -1157,6 +1162,8 @@ authorizationresources
     war='A' 
   elif len(read_classes)>0:
     war='R'
+  else:
+    war='N'
   if len(write_delete_classes)>0:
     srps=''
     if '*' in write_delete_providers:
