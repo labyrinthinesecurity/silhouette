@@ -1227,7 +1227,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=investigate_cluster(pk,str(cl),False)
+      c,o,d=investigate_cluster(pk,str(cl),True)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1507,14 +1507,14 @@ def investigate_cluster(pk,cluster,verbose):
                       # Local W actions cannot be absorbed. We add them.
                       ard['Actions']['SUB'].add(ac)
                   # Local W absorbs local A actions and below (so SUB and RG)
-                  if aw=='W' and strategy['A'] is not None and  ss in sxadict['A'] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])) and an in sxadict['A'][ss][rg]:
+                  if aw=='W' and strategy['A'] is not None and  ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])):
                     for rg1 in sxadict['A'][ss]:
                       for an1 in sxadict['A'][ss][rg1]:
                         if an1==nm:
                           for ac in sxadict['A'][ss][rg1][an1]:
                             ard['Actions']['SUB'].add(ac)
                   # Local W and local A absorb local R actions (so SUB and RG)
-                  if aw!='R' and strategy['R'] is not None and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])) and ss in sxadict['R'] and an in sxadict['R'][ss][rg]:
+                  if aw!='R' and strategy['R'] is not None and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg] and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])):
                     for rg1 in sxadict['R'][ss]:
                       for an1 in sxadict['R'][ss][rg1]:
                         if an1==nm:
