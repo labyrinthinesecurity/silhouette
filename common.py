@@ -1,6 +1,6 @@
 import os,requests,sys,re
-import json,urllib.request
-import logging,time,uuid
+import json,urllib.request,socket,random
+import logging,time,uuid,gzip
 from datetime import datetime,timedelta
 from z3 import *
 import functools
@@ -113,6 +113,70 @@ def get_token(resource):
       print("Token An unexpected error occurred: ", e)
       return None
     return None
+
+def upload_blob(account,pk,principalId,json_obj):
+  SAS=os.getenv(f"{account}_sas")
+  url=f"https://{account}.blob.core.windows.net/"+pk+'/'+principalId+'.json.gz?'+SAS
+  try:
+    json_str = json.dumps(json_obj)
+    bindata = gzip.compress(json_str.encode('utf-8'))
+  except Exception as e:
+    logging.info("Cannot convert JSON to bytes")
+    print(f"Cannot convert JSON to bytes, error: {e}")
+    return False
+  req=urllib.request.Request(url=url, data=bindata, method='PUT')
+  req.add_header('X-Ms-Blob-Type', 'BlockBlob')
+  req.add_header('Content-Encoding', 'gzip')
+  try:
+    with urllib.request.urlopen(req,timeout=10) as response:
+      logging.info("response %s",str(response.code))
+      print("response",str(response.code))
+      return True
+  except urllib.error.HTTPError as e:
+    logging.info("code %s",str(e.code))
+    print("code",str(e.code))
+  except urllib.error.URLError as e:
+    if hasattr(e, 'reason'):
+      logging.info("reason %s",str(e.reason))
+      print("reason",str(e.reason))
+    elif hasattr(e, 'code'):
+      logging.info("code2 %s",str(e.code))
+      print("code2",str(e.code))
+  return False
+
+def download_blob(account,pk,principalId):
+  max_retries=1
+  SAS=os.getenv(f"{account}_sas")
+  url=f"https://{account}.blob.core.windows.net/"+pk+'/'+principalId+'.json.gz?'+SAS
+  for attempt in range(0,max_retries+1):
+    try:
+      req=urllib.request.Request(url=url, method='GET')
+      with urllib.request.urlopen(req,timeout=7) as response:
+          compressed_data = response.read()
+      decompressed_data = gzip.decompress(compressed_data)
+      json_str = decompressed_data.decode('utf-8')
+      json_obj = json.loads(json_str)
+      return json_obj
+    except urllib.error.HTTPError as e:
+      logging.info("code %s",str(e.code))
+    except urllib.error.URLError as e:
+      if hasattr(e, 'reason'):
+        if isinstance(e.reason, socket.timeout):
+          print(f"Download attempt {attempt +1} timed out:", e)
+          if attempt < max_retries:
+            print("Retrying...")
+            time.sleep(1)
+          else:
+            return None
+        logging.info("reason %s",str(e.reason))
+      elif hasattr(e, 'code'):
+        logging.info("code2 %s",str(e.code))
+    except ConnectionResetError as e:
+      print("Row Connection was reset by the peer: ", e)
+      return None
+    except Exception as e:
+      print(f"Error: {str(e)}")
+      return None
 
 def get_row(account,table,PK,RK):
   SAS=os.getenv(f"{account}_sas")
@@ -402,6 +466,7 @@ def microsoft_graph_query(url, token=None):
     return None, token,None
 
 def fetch_logs_by_id(workspace_id,principalId,dFrom,dTo,token):
+    max_retries=2
     if not token:
         token = get_token('api.loganalytics.io')
     headers = {
@@ -428,22 +493,26 @@ AzureActivity
 '''
     api_url = f'https://api.loganalytics.io/v1/workspaces/{workspace_id}/query' 
     post_data = json.dumps({'query': query}).encode('utf-8')
-    req = urllib.request.Request(api_url, post_data, headers)
-    try:
-      response = urllib.request.urlopen(req)
-    except urllib.error.HTTPError as e:
-      print(f"Fetch logs HTTP error occurred: {e.code} - {e.reason}")
-      return None,token
-    except urllib.error.URLError as e:
-      print(f"Fetch logs URL error occurred: {e.reason}")
-      return None,token
-    except Exception as e:
-      print(f"Fetch logs An unexpected error occurred: {e}")
-      return None,token
-    response_data = json.loads(response.read())
-    return response_data['tables'][0]['rows'],token
+    for attempt in range(0,max_retries):
+      try:
+        req = urllib.request.Request(api_url, post_data, headers)
+        response = urllib.request.urlopen(req)
+        response_data = json.loads(response.read())
+        return response_data['tables'][0]['rows'],token
+      except urllib.error.HTTPError as e:
+        print(f"Fetch logs HTTP error occurred: {e.code} - {e.reason}")
+        return None,token
+      except urllib.error.URLError as e:
+        print(f"Fetch logs URL error occurred: {e.reason}")
+        return None,token
+      except Exception as e:
+        print(f"Fetch logs An unexpected error occurred: {e}")
+        return None,token
+      if attempt < max_retries+1:
+        time.sleep(10)
 
 def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
+  token=None
   actionXscope={}
   row=get_row(account,run_goldensource,run_partition,principalId)
   if row is None or len(row)==0:
@@ -461,14 +530,24 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
   gsource['Aresolution']=pld['Aresolution']
   groundroles={}
   goldenroles={}
-  payload,token=fetch_logs_by_id(wid,principalId,sFrom,sTo,token)
+  cached=False
+  payload=download_blob(account,run_partition,principalId)
+  if payload is None:
+    print(principalId,"payload MISS")
+    payload,token=fetch_logs_by_id(wid,principalId,sFrom,sTo,token)
+  else:
+    cached=True
+    print(principalId,"payload HIT")
   if payload is None:
     if verbose:
       print(" no activity")
     return None,False,None,None,None,token 
+  if not cached:
+    print("now uploading")
+    upload_blob(account,run_partition,principalId,payload)
+    time.sleep(0.4)
   if verbose:
-    print(" logs:",len(payload))
-  time.sleep(0.2)
+    print(display,principalId,"logs:",len(payload))
   super_classes={}
   super_res=set([])
   write_delete_classes={}
@@ -587,55 +666,6 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
     if not verbose:
       store_row8(account,build_groundsource,build_partition,principalId,display,war,gsource['war'],Sresolution,Wresolution,Aresolution,gsource['Sresolution'],gsource['Wresolution'],gsource['Aresolution'],da,gsource['da'],json.dumps(ground))
   return zperms,isUsed,gsource,ground,actionXscope,token
-
-def compare_by_type(wid,principalType,sFrom,sTo):
-  start=int(time.time())
-  if principalType=="User" or principalType=="Group" or principalType=="ServicePrincipal":
-    query='''
-authorizationresources
-    | where type == "microsoft.authorization/roleassignments"
-    | where tostring(properties.principalType) == "
-'''
-    query=query[:-1]+principalType
-    query=query+'''"
-    | summarize principals=make_set(properties.principalId)
-'''
-  else:
-    return None
-  results,Rtoken = fetch_resource_graph_results(query=query,token=None)
-  ppls=results[0]['principals']
-  cnt=0
-  token=None
-  Ztoken=None
-  Utoken=None
-  for aP in ppls:
-    if cnt%10==0:
-      print(" ")
-      print("COUNTER",cnt,len(ppls))
-      now=int(time.time())
-      if (now-start)>600:
-        Rtoken=None
-        Utoken=None
-        Ztoken=None
-    orpartition=aP[:2]
-    row=get_row(account,orphans,orpartition,aP)
-    if row is None or len(row)==0:
-      code,Utoken,display,exists,entity=entity_exists(aP,principalType,token=Utoken)
-      if not exists and code and int(code)==404:
-        print(aP,"not found in AAD, lets add it to orphans...")
-        answ=store_row(account,orphans,orpartition,aP,'')
-        continue
-      else:
-        print(aP,"found in AAD")
-        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,token=token)
-        print(aP," WAR is",a1)
-        if a1 is not None:
-          zp,isUsed,source,ground,axs,Ztoken=build_ground_truth(wid,aP,display,timeBack,timeNow,Ztoken,False)
-          if isUsed==False:
-            store_row5u(account,unused,build_partition,aP,display,entity['accountEnabled'],entity['createdDateTime'],entity['servicePrincipalType'],json.dumps(source))
-    else:
-      print(aP,orpartition,"found in orphans => IGNORING")
-    cnt+=1
 
 def fetch_resource_graph_results(query,token):
     if not token:
@@ -961,12 +991,7 @@ def partition_permissions(permissions,resolution,zperms):
         zitem=cwp+":"+str(resolution)+":"+permission.lower()
         zperms.add(zitem)
         if '*' in zitem and cwp!='read':
-          if rp:
-            print("MMM RP",zitem,cwp,rp)
-            stars.add(zitem)
-          else:
-            print("MMM no rp")
-            stars.add(zitem)
+          stars.add(zitem)
         war_root = war_sets[cwp].find(permission)
         war_classes[cwp].setdefault(war_root, set()).add(permission)
         if rp:
@@ -1126,8 +1151,6 @@ authorizationresources
       print("UNKNOWN SCOPE:",scope)
       sys.exit()
     classes,rps,stars = partition_permissions(actions,resolution,permset)
-    if stars is not None and len(stars)>0:
-      print("STARS ",stars)
     for astar in stars:
       if astar not in starRoles:
         starRoles[astar]=set([])
@@ -1273,6 +1296,7 @@ def investigate_cluster(pk,cluster,verbose):
   das=[]
   dactions=set()
   notdactions=set()
+  random.shuffle(czc[scluster])
   for record in czc[scluster]:
     name,pid=record['Name'].split('(')
     pid=pid[:-1]
@@ -1354,7 +1378,7 @@ def investigate_cluster(pk,cluster,verbose):
   for g in golden_counts:
     cl,res,pr=g.split(':')
     if verbose:
-      print("  ",g)
+      print("  ",str(g))
     if cl=='superadmin':
       someSuperAdmin=True
       if silhouette[cl][str(res)]> outer_sil['write/delete']:
