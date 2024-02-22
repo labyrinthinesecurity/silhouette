@@ -1027,7 +1027,7 @@ def entity_exists(principal_id, principal_type,token):
         return code,token, display_name,True,result
     return code,token, None,False,None
 
-def fetch_assignments_by_id(principalId,verbose,token):
+def fetch_assignments_by_id(principalId,verbose,group,token):
   starRoles={}
   query='''
 authorizationresources
@@ -1102,7 +1102,7 @@ authorizationresources
       groups.add(ag['id'])
     grcnt=0
     for gr in groups:
-      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,dac,notdac,token=fetch_assignments_by_id(gr,verbose=False,token=token)   
+      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,dac,notdac,token=fetch_assignments_by_id(gr,verbose=verbose,group=True,token=token)   
       if war is None:
         continue
       if "displayName" in ag:
@@ -1222,12 +1222,15 @@ authorizationresources
     jbuf['Wresolution']=min(write_res)
   if len(action_res)>0:
     jbuf['Aresolution']=min(action_res)
-  if not verbose:
+  if group:
+    print("(group)")
+  if not verbose and not group:
+    print("storing")
     store_row5(account,build_goldensource,build_partition,principalId,d,war,jbuf['Sresolution'],jbuf['Wresolution'],jbuf['Aresolution'],da,json.dumps(jbuf))
   return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,list(dactions),list(notdactions),token
 
 def investigate_principalId(pk,principalId,verbose):
-  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,notdactions,token=fetch_assignments_by_id(principalId,verbose=verbose,token=None)
+  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,notdactions,token=fetch_assignments_by_id(principalId,verbose=verbose,group=False,token=None)
   if war is None:
     return None,None,None,None,None,None,None,None,None,None
   ground_permset,isUsed,gsource,ground,axs,token=build_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
@@ -1448,7 +1451,7 @@ def investigate_cluster(pk,cluster,verbose):
           if rgcnt>maxRGs[aw]:
             maxRGs[aw]=rgcnt
     for aw in ['W','A','R']:
-      if maxSubs[aw]>=8:
+      if maxSubs[aw]>=400:
         strategy[aw]='MG'
       else:
         if maxRGs[aw]>=6:
@@ -1457,8 +1460,10 @@ def investigate_cluster(pk,cluster,verbose):
           strategy[aw]='RG'
         else:
           strategy[aw]=None
-#    print("STRATEGY",strategy)
-#    print("max Subs:",maxSubs,"max RGs:",maxRGs)
+      if strategy[aw] is not None:
+        strategy[aw]='SUB'
+    print("STRATEGY",strategy)
+    print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
     ard['Actions']={
               'RG': set(),
@@ -1586,15 +1591,16 @@ def investigate_cluster(pk,cluster,verbose):
     desired_roles=reason_clusterwide(parent_sets)
     for s in [ 'MG', 'SUB', 'RG' ]:
       if s=='MG':
-        resolution=1
-      elif s=='SUB':
         resolution=2
+      elif s=='SUB':
+        resolution=3
       elif s=='RG':
          resolution=4
       for pset in desired_roles[s]:
-#        print(s,"pset",list(pset))
-#        print(s,"desired s",desired[s])
+        print(s,"pset",list(pset))
+        print(s,"desired BEFORE",desired[s])
         partition_permissions(list(pset),resolution,desired[s])
+        print(s,"desired AFTER",desired[s])
 #      print(" ")
 #    print(" ")
     desired_counts= {
@@ -1604,9 +1610,9 @@ def investigate_cluster(pk,cluster,verbose):
             }
     for s in [ 'MG', 'SUB', 'RG' ]:
       if s=='MG':
-        resolution=1
-      elif s=='SUB':
         resolution=2
+      elif s=='SUB':
+        resolution=3
       elif s=='RG':
          resolution=4
       for g in desired[s]:
