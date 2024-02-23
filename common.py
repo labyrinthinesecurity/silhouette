@@ -23,6 +23,7 @@ logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
 membership={}
 warpermdict={}
+cosinecache={}
 dstamp=datetime.now().strftime("%y%m%d")
 
 silhouette={
@@ -81,6 +82,21 @@ silhouette={
             '8': 2
          }
         }
+
+from sklearn.cluster import KMeans
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import pandas as pd
+
+df = pd.read_csv('RGs.csv', header=None, names=['resourcegroups', 'category'])
+X_train = df['resourcegroups'].tolist()
+y_train = df['category'].tolist()
+# Vectorize resource group names using TF-IDF
+vectorizer = TfidfVectorizer()
+X_train_vectorized = vectorizer.fit_transform(X_train)
+# Train K-means model
+kmeans = KMeans(n_clusters=5, random_state=42)
+kmeans.fit(X_train_vectorized)
 
 permSort=DeclareSort('permission')
 
@@ -1263,6 +1279,7 @@ def build_silhouette(pk,render):
     ff.write(post)
 
 def investigate_cluster(pk,cluster,verbose):
+  global cosinecache
   outer_sil={
           'write/delete': 0,
           'action': 0,
@@ -1436,12 +1453,20 @@ def investigate_cluster(pk,cluster,verbose):
       ards[nm]={
               'MG': [],
               'SUB': [],
-              'RG': []
+              'RG0': [],
+              'RG1': [],
+              'RG2': [],
+              'RG3': [],
+              'RG4': []
               }
       parent_sets[nm]={
               'MG': [],
               'SUB': [],
-              'RG': []
+              'RG0': [],
+              'RG1': [],
+              'RG2': [],
+              'RG3': [],
+              'RG4': []
       }
       for aw in axsdict[nm]:
         subcnt=len(axsdict[nm][aw])
@@ -1452,27 +1477,35 @@ def investigate_cluster(pk,cluster,verbose):
           if rgcnt>maxRGs[aw]:
             maxRGs[aw]=rgcnt
     for aw in ['W','A','R']:
-      if maxSubs[aw]>=400:
+      if maxSubs[aw]>=4000:
         strategy[aw]='MG'
       else:
-        if maxRGs[aw]>=6:
+        if maxRGs[aw]>=20:
           strategy[aw]='SUB'
         elif maxRGs[aw]>0:
           strategy[aw]='RG'
         else:
           strategy[aw]=None
       if strategy[aw] is not None:
-        strategy[aw]='SUB'
+        strategy[aw]='RG'
     print("STRATEGY",strategy)
     print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
     ard['Actions']={
-              'RG': set(),
+              'RG0': set(),
+              'RG1': set(),
+              'RG2': set(),
+              'RG3': set(),
+              'RG4': set(),
               'SUB': set(),
               'MG': set()
     }
     desired={
-              'RG': set(),
+              'RG0': set(),
+              'RG1': set(),
+              'RG2': set(),
+              'RG3': set(),
+              'RG4': set(),
               'SUB': set(),
               'MG': set()
     }
@@ -1482,8 +1515,14 @@ def investigate_cluster(pk,cluster,verbose):
       if strategy[aw]=='RG':
         for ss in sxadict[aw]: 
           for rg in sxadict[aw][ss]:
-            print("NEW RG set",rg)
-            ard['Actions']['RG']=set()
+            print("NEW RG set",rg," ",end='')
+            if rg not in cosinecache:
+              vec=vectorizer.transform([rg])
+              cos=cosine_similarity(vec,X_train_vectorized).flatten()
+              cosinecache[rg]=y_train[cos.argmax()]
+            rgcat='RG'+str(cosinecache[rg])
+            print("CAT",rgcat)
+            ard['Actions'][rgcat]=set()
             for nm in sxadict[aw][ss][rg]:
               for an in sxadict[aw][ss][rg]:
                 if an==nm:
@@ -1496,29 +1535,43 @@ def investigate_cluster(pk,cluster,verbose):
                       pass
                     else:
                       # Local W actions cannot be absorbed by an upper authority. So we add them. 
-                      ard['Actions']['RG'].add(ac)
-                      print("  Case W: rg",rg,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
+                      print("  Case W: rg",rg,"cat",rgcat,"add",ac)
 #                      else:
                         # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
 #                        pass
                   # Local W absorbs local A actions (so RG actions)
                   if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     for ac in sxadict['A'][ss][rg][an]:
-                      print("  Case W>A: rg",rg,"add",ac)
-                      ard['Actions']['RG'].add(ac)
+                      print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
                   # Local W and local A absorb local R actions
                   if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                     for ac in sxadict['R'][ss][rg][an]:
-                      print("  Case W|A>R: rg",rg,"add",ac)
-                      ard['Actions']['RG'].add(ac)
+                      print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
                       if cluster=="20":
                         print("artificially adding perm microsoft.network/routetables/write")
-            if len(ard['Actions']['RG'])>0:
-              ards[nm]['RG'].append(sorted(list(ard['Actions']['RG'])))
-              print("Parent set addition for rg",rg,ard['Actions']['RG'])
-              parent_sets[nm]['RG'].append(ard['Actions']['RG'])
-#              if cluster=="20":
-#                parent_sets[nm]['RG'].append({'microsoft.network/routetables/write'})
+            if len(ard['Actions']['RG0'])>0:
+              ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
+              print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
+              parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
+            if len(ard['Actions']['RG1'])>0:
+              ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
+              print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
+              parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
+            if len(ard['Actions']['RG2'])>0:
+              ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
+              print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
+              parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
+            if len(ard['Actions']['RG3'])>0:
+              ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
+              print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
+              parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
+            if len(ard['Actions']['RG4'])>0:
+              ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
+              print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
+              parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
         for ss in sxadict[aw]:
           ard['Actions']['SUB']=set()
@@ -1584,18 +1637,22 @@ def investigate_cluster(pk,cluster,verbose):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-#    print("parent sets")
-#    for aP in parent_sets:
-#      print("  principal",aP,p2n[aP])
-#      print("  ..",parent_sets[aP])
+    print("parent sets")
+    for aP in parent_sets:
+      print("  principal",aP,p2n[aP])
+      print("  ..",parent_sets[aP])
     print(" ")
     desired_roles=reason_clusterwide(parent_sets)
-    for s in [ 'MG', 'SUB', 'RG' ]:
+    print("REASONING")
+    print(desired_roles)
+    print("")
+    for s in [ 'MG', 'SUB', 'RG0', 'RG1', 'RG2', 'RG3', 'RG4' ]:
       if s=='MG':
         resolution=2
       elif s=='SUB':
         resolution=3
-      elif s=='RG':
+      #elif s=='RG':
+      else:
          resolution=4
       for pset in desired_roles[s]:
         print(s,"pset",list(pset))
@@ -1607,14 +1664,19 @@ def investigate_cluster(pk,cluster,verbose):
     desired_counts= {
             'MG': {},
             'SUB': {},
-            'RG': {}
+            'RG0': {},
+            'RG1': {},
+            'RG2': {},
+            'RG3': {},
+            'RG4': {}
             }
-    for s in [ 'MG', 'SUB', 'RG' ]:
+    for s in [ 'MG', 'SUB', 'RG0', 'RG1', 'RG2', 'RG3', 'RG4' ]:
       if s=='MG':
         resolution=2
       elif s=='SUB':
         resolution=3
-      elif s=='RG':
+      #elif s=='RG':
+      else:
          resolution=4
       for g in desired[s]:
         if g not in desired_counts[s]:
@@ -1730,9 +1792,13 @@ def reason_clusterwide(pset):
   roles={
     'MG': [],
     'SUB': [],
-    'RG': []
+    'RG0': [],
+    'RG1': [],
+    'RG2': [],
+    'RG3': [],
+    'RG4': []
   }
-  for scope in [ 'MG', 'SUB', 'RG']:
+  for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
     sol.push()
     for pid in pset:
       for scopeset in pset[pid][scope]:
@@ -1766,9 +1832,9 @@ def reason_clusterwide(pset):
     sol.pop()
   return roles
 
-cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG': [{'a'}, {'b', 'c'}, {'h'}]},
-                  "p2": {'MG': set(), 'SUB': set(), 'RG': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}]},
-                  "p3": {'MG': set(), 'SUB': set(), 'RG': [{'b'}, {'f', 'a'}, {'h'}]}
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}]},
+                  "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}]},
+                  "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}]}
                 }
 
 NOPERM=addPerm('No perm')
