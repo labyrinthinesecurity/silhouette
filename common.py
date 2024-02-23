@@ -1462,7 +1462,7 @@ def investigate_cluster(pk,cluster,verbose):
         else:
           strategy[aw]=None
       if strategy[aw] is not None:
-        strategy[aw]='RG'
+        strategy[aw]='SUB'
     print("STRATEGY",strategy)
     print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
