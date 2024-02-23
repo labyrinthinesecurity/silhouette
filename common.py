@@ -1393,7 +1393,8 @@ def investigate_cluster(pk,cluster,verbose):
     print("WARNING: some SPNs in this cluster are superadmins. Superadmins have implicit IAM role definitions and role assignments, these are not currently supported by Silhouette so they must be added manually to SPN superadmins custom roles.")
   for g in golden_counts:
     cl,res,pr=g.split(':')
-    scaled=outer_sil['write/delete']>=700
+    #scaled=outer_sil['write/delete']>=700
+    scaled=True
     if cl=='action' or cl=='read':
       if scaled:
         if silhouette[cl+'_scaleddown'][str(res)]>outer_sil[cl]:
@@ -1461,7 +1462,7 @@ def investigate_cluster(pk,cluster,verbose):
         else:
           strategy[aw]=None
       if strategy[aw] is not None:
-        strategy[aw]='SUB'
+        strategy[aw]='RG'
     print("STRATEGY",strategy)
     print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
@@ -1629,10 +1630,10 @@ def investigate_cluster(pk,cluster,verbose):
             desired_sil['write/delete']=silhouette[cl][str(resolution)]
       for g in desired_counts[s]:
         cl,res,pr=g.split(':')
-        scaled=desired_sil['write/delete']>=700
+        #scaled=desired_sil['write/delete']>=700
         if cl=='action' or cl=='read':
-          if silhouette[cl][str(resolution)]>desired_sil[cl]:
-            desired_sil[cl]=silhouette[cl][str(resolution)]
+          if silhouette[cl+'_scaleddown'][str(resolution)]>desired_sil[cl]:
+            desired_sil[cl]=silhouette[cl+'_scaleddown'][str(resolution)]
     desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
     print("Desired silhouette=",desiredscore)
     print("")
