@@ -19,6 +19,9 @@ orphans = os.getenv(f"{account}_orphans")
 unused = os.getenv(f"{account}_unused")
 run_partition=os.getenv('run_partition')
 
+RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
+RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
+
 logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
 membership={}
@@ -82,21 +85,6 @@ silhouette={
             '8': 2
          }
         }
-
-from sklearn.cluster import KMeans
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import pandas as pd
-
-df = pd.read_csv('RGs.csv', header=None, names=['resourcegroups', 'category'])
-X_train = df['resourcegroups'].tolist()
-y_train = df['category'].tolist()
-# Vectorize resource group names using TF-IDF
-vectorizer = TfidfVectorizer()
-X_train_vectorized = vectorizer.fit_transform(X_train)
-# Train K-means model
-kmeans = KMeans(n_clusters=5, random_state=42)
-kmeans.fit(X_train_vectorized)
 
 permSort=DeclareSort('permission')
 
@@ -1158,10 +1146,16 @@ authorizationresources
     scope=aC['scope']
     resource,resolution=extract_azure_resource_details(scope)
     if len(aC['dataactions'])>0:
-      da=str(resolution)+':'+aC['dataactions']
-      dactions.add(da)
+      dal=json.loads(aC['dataactions'])
+      zdal=[]
+      for ada in dal:
+        if ada!="*":
+          zdal.append(ada)
+      if len(zdal)>0:
+        da=str(scope)+':'+str(zdal)
+        dactions.add(da)
     if len(aC['notdataactions'])>0:
-      nda=str(resolution)+':'+aC['notdataactions']
+      nda=str(scope)+':'+aC['notdataactions']
       notdactions.add(nda)
     if not scope:
       print("UNKNOWN SCOPE:",scope)
@@ -1278,7 +1272,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def investigate_cluster(pk,cluster,verbose):
+def investigate_cluster(pk,cluster,strat,verbose):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1477,17 +1471,21 @@ def investigate_cluster(pk,cluster,verbose):
           if rgcnt>maxRGs[aw]:
             maxRGs[aw]=rgcnt
     for aw in ['W','A','R']:
-      if maxSubs[aw]>=4000:
+      if maxSubs[aw]>=10:
         strategy[aw]='MG'
       else:
-        if maxRGs[aw]>=20:
+        if maxRGs[aw]==1:
           strategy[aw]='SUB'
-        elif maxRGs[aw]>0:
+        elif maxRGs[aw]>1:
           strategy[aw]='RG'
         else:
           strategy[aw]=None
       if strategy[aw] is not None:
-        strategy[aw]='RG'
+        if strat is None:
+#          strategy[aw]='RG'
+          pass
+        else:
+          strategy[aw]=strat
     print("STRATEGY",strategy)
     print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
@@ -1517,9 +1515,15 @@ def investigate_cluster(pk,cluster,verbose):
           for rg in sxadict[aw][ss]:
             print("NEW RG set",rg," ",end='')
             if rg not in cosinecache:
-              vec=vectorizer.transform([rg])
-              cos=cosine_similarity(vec,X_train_vectorized).flatten()
-              cosinecache[rg]=y_train[cos.argmax()]
+              if re.match(RG_PATTERN0,rg):
+                cosinecache[rg]=0
+                print(rg,"matches", RG_PATTERN0)
+              elif re.match(RG_PATTERN1,rg):
+                cosinecache[rg]=1
+                print(rg,"matches", RG_PATTERN1)
+              else:
+                cosinecache[rg]=2
+                print(rg,"matches no pattern")
             rgcat='RG'+str(cosinecache[rg])
             print("CAT",rgcat)
             ard['Actions'][rgcat]=set()
