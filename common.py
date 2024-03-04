@@ -1149,13 +1149,13 @@ authorizationresources
       dal=json.loads(aC['dataactions'])
       zdal=[]
       for ada in dal:
-        if ada!="*":
-          zdal.append(ada)
+#        if ada!="*":
+        zdal.append(ada)
       if len(zdal)>0:
-        da=str(scope)+':'+str(zdal)
+        da=str(resource)+':'+str(scope)+':'+str(zdal)
         dactions.add(da)
     if len(aC['notdataactions'])>0:
-      nda=str(scope)+':'+aC['notdataactions']
+      nda=str(resource)+':'+str(scope)+':'+aC['notdataactions']
       notdactions.add(nda)
     if not scope:
       print("UNKNOWN SCOPE:",scope)
@@ -1263,7 +1263,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=investigate_cluster(pk,str(cl),True)
+      c,o,d=investigate_cluster(pk,str(cl),None,True)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
