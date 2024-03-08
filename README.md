@@ -9,19 +9,25 @@ Silhouette runs through all your SPNs and groups them by similarity into cluster
 Then, within each cluster, it pulls the actual Azure RBAC permissions of all SPNs from Azure Entra and compares them to Azure Activity logs. 
 
 From that analysis, Silhouette provide 3 per-cluster indicators:
-- Desired score (blue): a numerical representation of the RBAC privileges required for the cluster to run without incident, based on "ground truth" observations (Azure Activity Logs)
+- Inner score (blue): a numerical representation of the RBAC privileges required for the cluster to run with minimal permissions, based on "ground truth" observations (Azure Activity Logs)
 - Outer score (orange): a numerical representation of the RBAC privileges directly or indirectly (through group membership) granted to the SPNs in the cluster
 - De-escalation reward (green): the difference between the two scores.
 
-These indicators are generated with the help of a new distance metric called the *silhouette metric*.
+The first two indicators are generated with the help of a new norm called the *WAR norm*.
+
+The last indicator (the reward) is generated with the help of the distance induced by the WAR norm: the *WAR distance*.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG" width="50%">
 
-De-escalation reward lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
+In practice, it is not reasonable to try to de-escalate to the inner score, because the inner score is always scoped at resource level, by definition of LAW logs. To avoid generating an unscalable number of roles, you want to scopre permissions at resource group level (or higher). Let's call it the desired score.
+
+Your desired score is always going to be a WAR norm belonging to the interval [inner score, outer score].
+
+The de-escalation reward lets you quickly determine which cluster to tackle in priority: the highest the number, the more urgent to de-escalate.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/outer.png" width="50%">
 
-Finally, Silhouette suggests per-cluster role definitions and role assignements that lets you reach the desired score.
+Finally, Silhouette suggests per-cluster role definitions and role assignements that lets you reach a desired score.
 
 ## De-escalation reward hierarchy
 
@@ -105,28 +111,30 @@ This will generate a bar chart file called silhouette_{name_of_your_run_partitio
 
 # De-escalation
 
+De-escalation is based on logs collected from your Log Analytics workspace. To optimize logs retrieval from Azure backends, they are cached in a container sitting in your storage account.
+Create a container called with the name of your build_partition
+
 ## customize role definitions of a cluster
 
-Now pick a cluster ID from the above mentioned CSV and stick it to the function called in investigate_cluster.py
+Now pick a cluster ID from the above mentioned CSV and stick it to the function called in condensate.py
 
-For example, if the cluster ID you want to investigate has cluster ID 7, you should set the function as follows:
+For example, if the cluster ID you want to condensate has cluster ID 7, you should set the function as follows:
 
 ```
-investigate_cluster(run_partition,"7",verbose=True)
+generate_condensate(run_partition,"7",verbose=True,debug=False)
 ```
 
 Notice that the cluster ID is actually string "7", not number 7.
 
-Run investigate_cluster.py to stdout a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth).
-This will help you reshape (or create) built-in role definitions, clusterwide.
+Run condensate.py to stdout a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth). As explained above, logs will retrieved from your local container cache. If they are not already there, they will be pulled from LAW and stored in the cache for future re-use.
 
-On stdout, it will also give you a proposed set of minimized role definitions for your cluster. These are used to calculate the desired silhouette of the cluster.
+condensate will help you reshape (or create) built-in role definitions, clusterwide. These clusterwide role definitions are dumped to stdout: they are called cluster condensates.
 
-investigate_cluster.py will also generate a file called clustername_ground_permissions.json that will help you understand whih SPN in the cluster is producing which ground permission, and in which scope. In our example with cluster 7, the file generated is called 7_ground_permissions.json
+If you set debug to True, generate_condensate.py will also dump a file called clustername_ground_permissions.json that will help you understand whih SPN in the cluster is producing which ground permission, and in which scope. In our example with cluster 7, the file generated is called 7_ground_permissions.json
 
 ## fine-tuning (clusterwide, not per SPN!)
 
-Most of ground truth permissions operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group, subscription, or, whenever possible, resource group level.
+Ground truth permissions operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group, subscription, or, whenever possible, resource group level.
 
 If you are ready to customize cluster roles, my recommendation is two split each cluster roles into three parts:
 

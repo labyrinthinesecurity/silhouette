@@ -1138,8 +1138,6 @@ authorizationresources
       if 'A' in da:
         assign_classes.update(gc)
       grcnt+=1
-#  if verbose:
-#    print(d,"groups:",grcnt,end='')
   buf=d
   for aC in aR['set_combinedRole']:
     actions=json.loads(aC['actions'])
@@ -1263,7 +1261,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=investigate_cluster(pk,str(cl),None,True)
+      c,o,d=generate_condensate(pk,str(cl),None,True)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1272,7 +1270,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def investigate_cluster(pk,cluster,strat,verbose):
+def generate_condensate(pk,cluster,strat,verbose,debug):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1414,7 +1412,7 @@ def investigate_cluster(pk,cluster,strat,verbose):
         if silhouette[cl][str(res)]>outer_sil[cl]:
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
-  if verbose:
+  if debug:
     with open(f"{cluster}_ground_permissions.json","w") as cgp:
       cgp.write("[")
       cgp.write(json.dumps(axsdict,indent=2))
@@ -1471,7 +1469,7 @@ def investigate_cluster(pk,cluster,strat,verbose):
           if rgcnt>maxRGs[aw]:
             maxRGs[aw]=rgcnt
     for aw in ['W','A','R']:
-      if maxSubs[aw]>=10:
+      if maxSubs[aw]>=20:
         strategy[aw]='MG'
       else:
         if maxRGs[aw]==1:
@@ -1646,7 +1644,7 @@ def investigate_cluster(pk,cluster,strat,verbose):
       print("  principal",aP,p2n[aP])
       print("  ..",parent_sets[aP])
     print(" ")
-    desired_roles=reason_clusterwide(parent_sets)
+    desired_roles=reason_clusterwide(cluster,parent_sets,debug)
     print("REASONING")
     print(desired_roles)
     print("")
@@ -1689,8 +1687,6 @@ def investigate_cluster(pk,cluster,strat,verbose):
           desired_counts[s][g]+=1
       for g in desired_counts[s]:
         cl,res,pr=g.split(':')
-#        if verbose:
-#          print(g)
         if cl=='write/delete':
           if silhouette[cl][str(resolution)]> desired_sil['write/delete']:
             desired_sil['write/delete']=silhouette[cl][str(resolution)]
@@ -1703,7 +1699,7 @@ def investigate_cluster(pk,cluster,strat,verbose):
     desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
     print("Desired silhouette=",desiredscore)
     print("")
-    print("Desired role assignments")
+    print("Cluster condensate:")
     print(desired_roles)
 #    print("Individual Role Definitions wihout EQ:",len(ards))
 #    print(json.dumps(ards,indent=2))
@@ -1790,8 +1786,8 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
-def reason_clusterwide(pset):
-#  print("Reason clusterwide")
+def reason_clusterwide(cluster,pset,dendrogram=False):
+  import csv
   sol=Solver()
   roles={
     'MG': [],
@@ -1804,23 +1800,45 @@ def reason_clusterwide(pset):
   }
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
     sol.push()
-    for pid in pset:
-      for scopeset in pset[pid][scope]:
-        cnt=-1
-        #print("PID",pid,"SCOPESET",scopeset)
-        for perm in scopeset:
-          cnt+=1
-          if cnt==0:
-            classRepresentative=addPerm(perm)
-            sol.add(classRepresentative!=NOPERM)
-          else:
-            z3perm=addPerm(perm)
-            sol.add(z3perm==classRepresentative)
+    dendroCounter=0
+    dendroCache={}
+    permCache={}
+    leftCache={}
+    with open(f"dendro-{cluster}-{scope}.csv", 'w', newline='') as file:
+      writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
+      if dendrogram:
+        writer.writeheader()
+      for pid in pset:
+        for scopeset in pset[pid][scope]:
+          cnt=-1
+          for perm in scopeset:
+            cnt+=1
+            if cnt==0:
+              classRepresentative=addPerm(perm)
+              sol.add(classRepresentative!=NOPERM)
+              permCache[str(classRepresentative)]=1
+            else:
+              z3perm=addPerm(perm)
+              sol.add(z3perm==classRepresentative)
+              if str(classRepresentative) not in dendroCache:
+                dendroCache[str(classRepresentative)]=1
+                dendroCounter+=1
+              permCache[str(z3perm)]=1
+              leftCache[str(z3perm)]=1
+              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+              if dendrogram:
+                writer.writerow(row)
+              dendroCounter+=1
+      for p in permCache.keys():
+        if p not in leftCache and p not in dendroCache:
+          row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
+          if dendrogram:
+            writer.writerow(row)
+          dendroCounter+=1
     localClasses={}
     if sol.check()==sat:
       mdl=sol.model()
       for item in mdl:
-        #print("..reviewing item",item)
         if str(item)!='No perm':
           foo=str(mdl[item]).split('val!')
           equivClass=int(foo[1])
@@ -1828,7 +1846,6 @@ def reason_clusterwide(pset):
           if sec not in localClasses:
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
-#      print(scope,"local classes",localClasses)
       for alc in localClasses:
         roles[scope].append(localClasses[alc])
     else:
@@ -1836,14 +1853,14 @@ def reason_clusterwide(pset):
     sol.pop()
   return roles
 
-cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}]},
-                  "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}]},
-                  "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}]}
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+        "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+        "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()}
                 }
 
 NOPERM=addPerm('No perm')
 
-#desired_roles=reason_clusterwide(cluster_sample)
+#desired_roles=reason_clusterwide("sample",cluster_sample,True)
 #print(desired_roles)
 #sys.exit()
 build_partition=new_partition()
