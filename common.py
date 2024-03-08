@@ -19,10 +19,14 @@ orphans = os.getenv(f"{account}_orphans")
 unused = os.getenv(f"{account}_unused")
 run_partition=os.getenv('run_partition')
 
+RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
+RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
+
 logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
 membership={}
 warpermdict={}
+cosinecache={}
 dstamp=datetime.now().strftime("%y%m%d")
 
 silhouette={
@@ -1134,18 +1138,22 @@ authorizationresources
       if 'A' in da:
         assign_classes.update(gc)
       grcnt+=1
-#  if verbose:
-#    print(d,"groups:",grcnt,end='')
   buf=d
   for aC in aR['set_combinedRole']:
     actions=json.loads(aC['actions'])
     scope=aC['scope']
     resource,resolution=extract_azure_resource_details(scope)
     if len(aC['dataactions'])>0:
-      da=str(resolution)+':'+aC['dataactions']
-      dactions.add(da)
+      dal=json.loads(aC['dataactions'])
+      zdal=[]
+      for ada in dal:
+#        if ada!="*":
+        zdal.append(ada)
+      if len(zdal)>0:
+        da=str(resource)+':'+str(scope)+':'+str(zdal)
+        dactions.add(da)
     if len(aC['notdataactions'])>0:
-      nda=str(resolution)+':'+aC['notdataactions']
+      nda=str(resource)+':'+str(scope)+':'+aC['notdataactions']
       notdactions.add(nda)
     if not scope:
       print("UNKNOWN SCOPE:",scope)
@@ -1253,7 +1261,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=investigate_cluster(pk,str(cl),True)
+      c,o,d=generate_condensate(pk,str(cl),None,True)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1262,7 +1270,8 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def investigate_cluster(pk,cluster,verbose):
+def generate_condensate(pk,cluster,strat,verbose,debug):
+  global cosinecache
   outer_sil={
           'write/delete': 0,
           'action': 0,
@@ -1403,7 +1412,7 @@ def investigate_cluster(pk,cluster,verbose):
         if silhouette[cl][str(res)]>outer_sil[cl]:
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
-  if verbose:
+  if debug:
     with open(f"{cluster}_ground_permissions.json","w") as cgp:
       cgp.write("[")
       cgp.write(json.dumps(axsdict,indent=2))
@@ -1436,12 +1445,20 @@ def investigate_cluster(pk,cluster,verbose):
       ards[nm]={
               'MG': [],
               'SUB': [],
-              'RG': []
+              'RG0': [],
+              'RG1': [],
+              'RG2': [],
+              'RG3': [],
+              'RG4': []
               }
       parent_sets[nm]={
               'MG': [],
               'SUB': [],
-              'RG': []
+              'RG0': [],
+              'RG1': [],
+              'RG2': [],
+              'RG3': [],
+              'RG4': []
       }
       for aw in axsdict[nm]:
         subcnt=len(axsdict[nm][aw])
@@ -1452,27 +1469,39 @@ def investigate_cluster(pk,cluster,verbose):
           if rgcnt>maxRGs[aw]:
             maxRGs[aw]=rgcnt
     for aw in ['W','A','R']:
-      if maxSubs[aw]>=400:
+      if maxSubs[aw]>=20:
         strategy[aw]='MG'
       else:
-        if maxRGs[aw]>=6:
+        if maxRGs[aw]==1:
           strategy[aw]='SUB'
-        elif maxRGs[aw]>0:
+        elif maxRGs[aw]>1:
           strategy[aw]='RG'
         else:
           strategy[aw]=None
       if strategy[aw] is not None:
-        strategy[aw]='SUB'
+        if strat is None:
+#          strategy[aw]='RG'
+          pass
+        else:
+          strategy[aw]=strat
     print("STRATEGY",strategy)
     print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
     ard['Actions']={
-              'RG': set(),
+              'RG0': set(),
+              'RG1': set(),
+              'RG2': set(),
+              'RG3': set(),
+              'RG4': set(),
               'SUB': set(),
               'MG': set()
     }
     desired={
-              'RG': set(),
+              'RG0': set(),
+              'RG1': set(),
+              'RG2': set(),
+              'RG3': set(),
+              'RG4': set(),
               'SUB': set(),
               'MG': set()
     }
@@ -1482,8 +1511,20 @@ def investigate_cluster(pk,cluster,verbose):
       if strategy[aw]=='RG':
         for ss in sxadict[aw]: 
           for rg in sxadict[aw][ss]:
-            print("NEW RG set",rg)
-            ard['Actions']['RG']=set()
+            print("NEW RG set",rg," ",end='')
+            if rg not in cosinecache:
+              if re.match(RG_PATTERN0,rg):
+                cosinecache[rg]=0
+                print(rg,"matches", RG_PATTERN0)
+              elif re.match(RG_PATTERN1,rg):
+                cosinecache[rg]=1
+                print(rg,"matches", RG_PATTERN1)
+              else:
+                cosinecache[rg]=2
+                print(rg,"matches no pattern")
+            rgcat='RG'+str(cosinecache[rg])
+            print("CAT",rgcat)
+            ard['Actions'][rgcat]=set()
             for nm in sxadict[aw][ss][rg]:
               for an in sxadict[aw][ss][rg]:
                 if an==nm:
@@ -1496,29 +1537,43 @@ def investigate_cluster(pk,cluster,verbose):
                       pass
                     else:
                       # Local W actions cannot be absorbed by an upper authority. So we add them. 
-                      ard['Actions']['RG'].add(ac)
-                      print("  Case W: rg",rg,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
+                      print("  Case W: rg",rg,"cat",rgcat,"add",ac)
 #                      else:
                         # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
 #                        pass
                   # Local W absorbs local A actions (so RG actions)
                   if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     for ac in sxadict['A'][ss][rg][an]:
-                      print("  Case W>A: rg",rg,"add",ac)
-                      ard['Actions']['RG'].add(ac)
+                      print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
                   # Local W and local A absorb local R actions
                   if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                     for ac in sxadict['R'][ss][rg][an]:
-                      print("  Case W|A>R: rg",rg,"add",ac)
-                      ard['Actions']['RG'].add(ac)
+                      print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
+                      ard['Actions'][rgcat].add(ac)
                       if cluster=="20":
                         print("artificially adding perm microsoft.network/routetables/write")
-            if len(ard['Actions']['RG'])>0:
-              ards[nm]['RG'].append(sorted(list(ard['Actions']['RG'])))
-              print("Parent set addition for rg",rg,ard['Actions']['RG'])
-              parent_sets[nm]['RG'].append(ard['Actions']['RG'])
-#              if cluster=="20":
-#                parent_sets[nm]['RG'].append({'microsoft.network/routetables/write'})
+            if len(ard['Actions']['RG0'])>0:
+              ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
+              print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
+              parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
+            if len(ard['Actions']['RG1'])>0:
+              ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
+              print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
+              parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
+            if len(ard['Actions']['RG2'])>0:
+              ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
+              print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
+              parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
+            if len(ard['Actions']['RG3'])>0:
+              ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
+              print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
+              parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
+            if len(ard['Actions']['RG4'])>0:
+              ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
+              print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
+              parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
         for ss in sxadict[aw]:
           ard['Actions']['SUB']=set()
@@ -1584,18 +1639,22 @@ def investigate_cluster(pk,cluster,verbose):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-#    print("parent sets")
-#    for aP in parent_sets:
-#      print("  principal",aP,p2n[aP])
-#      print("  ..",parent_sets[aP])
+    print("parent sets")
+    for aP in parent_sets:
+      print("  principal",aP,p2n[aP])
+      print("  ..",parent_sets[aP])
     print(" ")
-    desired_roles=reason_clusterwide(parent_sets)
-    for s in [ 'MG', 'SUB', 'RG' ]:
+    desired_roles=reason_clusterwide(cluster,parent_sets,debug)
+    print("REASONING")
+    print(desired_roles)
+    print("")
+    for s in [ 'MG', 'SUB', 'RG0', 'RG1', 'RG2', 'RG3', 'RG4' ]:
       if s=='MG':
         resolution=2
       elif s=='SUB':
         resolution=3
-      elif s=='RG':
+      #elif s=='RG':
+      else:
          resolution=4
       for pset in desired_roles[s]:
         print(s,"pset",list(pset))
@@ -1607,14 +1666,19 @@ def investigate_cluster(pk,cluster,verbose):
     desired_counts= {
             'MG': {},
             'SUB': {},
-            'RG': {}
+            'RG0': {},
+            'RG1': {},
+            'RG2': {},
+            'RG3': {},
+            'RG4': {}
             }
-    for s in [ 'MG', 'SUB', 'RG' ]:
+    for s in [ 'MG', 'SUB', 'RG0', 'RG1', 'RG2', 'RG3', 'RG4' ]:
       if s=='MG':
         resolution=2
       elif s=='SUB':
         resolution=3
-      elif s=='RG':
+      #elif s=='RG':
+      else:
          resolution=4
       for g in desired[s]:
         if g not in desired_counts[s]:
@@ -1623,8 +1687,6 @@ def investigate_cluster(pk,cluster,verbose):
           desired_counts[s][g]+=1
       for g in desired_counts[s]:
         cl,res,pr=g.split(':')
-#        if verbose:
-#          print(g)
         if cl=='write/delete':
           if silhouette[cl][str(resolution)]> desired_sil['write/delete']:
             desired_sil['write/delete']=silhouette[cl][str(resolution)]
@@ -1637,7 +1699,7 @@ def investigate_cluster(pk,cluster,verbose):
     desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
     print("Desired silhouette=",desiredscore)
     print("")
-    print("Desired role assignments")
+    print("Cluster condensate:")
     print(desired_roles)
 #    print("Individual Role Definitions wihout EQ:",len(ards))
 #    print(json.dumps(ards,indent=2))
@@ -1724,33 +1786,59 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
-def reason_clusterwide(pset):
-#  print("Reason clusterwide")
+def reason_clusterwide(cluster,pset,dendrogram=False):
+  import csv
   sol=Solver()
   roles={
     'MG': [],
     'SUB': [],
-    'RG': []
+    'RG0': [],
+    'RG1': [],
+    'RG2': [],
+    'RG3': [],
+    'RG4': []
   }
-  for scope in [ 'MG', 'SUB', 'RG']:
+  for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
     sol.push()
-    for pid in pset:
-      for scopeset in pset[pid][scope]:
-        cnt=-1
-        #print("PID",pid,"SCOPESET",scopeset)
-        for perm in scopeset:
-          cnt+=1
-          if cnt==0:
-            classRepresentative=addPerm(perm)
-            sol.add(classRepresentative!=NOPERM)
-          else:
-            z3perm=addPerm(perm)
-            sol.add(z3perm==classRepresentative)
+    dendroCounter=0
+    dendroCache={}
+    permCache={}
+    leftCache={}
+    with open(f"dendro-{cluster}-{scope}.csv", 'w', newline='') as file:
+      writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
+      if dendrogram:
+        writer.writeheader()
+      for pid in pset:
+        for scopeset in pset[pid][scope]:
+          cnt=-1
+          for perm in scopeset:
+            cnt+=1
+            if cnt==0:
+              classRepresentative=addPerm(perm)
+              sol.add(classRepresentative!=NOPERM)
+              permCache[str(classRepresentative)]=1
+            else:
+              z3perm=addPerm(perm)
+              sol.add(z3perm==classRepresentative)
+              if str(classRepresentative) not in dendroCache:
+                dendroCache[str(classRepresentative)]=1
+                dendroCounter+=1
+              permCache[str(z3perm)]=1
+              leftCache[str(z3perm)]=1
+              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+              if dendrogram:
+                writer.writerow(row)
+              dendroCounter+=1
+      for p in permCache.keys():
+        if p not in leftCache and p not in dendroCache:
+          row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
+          if dendrogram:
+            writer.writerow(row)
+          dendroCounter+=1
     localClasses={}
     if sol.check()==sat:
       mdl=sol.model()
       for item in mdl:
-        #print("..reviewing item",item)
         if str(item)!='No perm':
           foo=str(mdl[item]).split('val!')
           equivClass=int(foo[1])
@@ -1758,7 +1846,6 @@ def reason_clusterwide(pset):
           if sec not in localClasses:
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
-#      print(scope,"local classes",localClasses)
       for alc in localClasses:
         roles[scope].append(localClasses[alc])
     else:
@@ -1766,14 +1853,14 @@ def reason_clusterwide(pset):
     sol.pop()
   return roles
 
-cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG': [{'a'}, {'b', 'c'}, {'h'}]},
-                  "p2": {'MG': set(), 'SUB': set(), 'RG': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}]},
-                  "p3": {'MG': set(), 'SUB': set(), 'RG': [{'b'}, {'f', 'a'}, {'h'}]}
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+        "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+        "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()}
                 }
 
 NOPERM=addPerm('No perm')
 
-#desired_roles=reason_clusterwide(cluster_sample)
+#desired_roles=reason_clusterwide("sample",cluster_sample,True)
 #print(desired_roles)
 #sys.exit()
 build_partition=new_partition()
