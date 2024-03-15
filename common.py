@@ -1556,22 +1556,28 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
                         print("artificially adding perm microsoft.network/routetables/write")
             if len(ard['Actions']['RG0'])>0:
               ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
+              ard['Actions']['RG0'].add('R::'+rg)
               print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
               parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
             if len(ard['Actions']['RG1'])>0:
               ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
+              ard['Actions']['RG1'].add('R::'+rg)
               print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
               parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
             if len(ard['Actions']['RG2'])>0:
               ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
+#              ard['Actions']['RG2'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG2'].add('R::'+rg)
               print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
               parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
             if len(ard['Actions']['RG3'])>0:
               ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
+              ard['Actions']['RG3'].add('R::'+rg)
               print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
               parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
             if len(ard['Actions']['RG4'])>0:
               ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
+              ard['Actions']['RG4'].add('R::'+rg)
               print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
               parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
@@ -1799,43 +1805,93 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     'RG4': []
   }
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
+    if os.path.exists(f"dendro-{cluster}-{scope}.csv"):
+      os.remove(f"dendro-{cluster}-{scope}.csv")
     sol.push()
-    dendroCounter=0
     dendroCache={}
     permCache={}
     leftCache={}
-    with open(f"dendro-{cluster}-{scope}.csv", 'w', newline='') as file:
-      writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
-      if dendrogram:
-        writer.writeheader()
-      for pid in pset:
-        for scopeset in pset[pid][scope]:
+    permLeftHistory={}
+    permRightHistory={}
+    prvh=0
+    oldlen=0
+    dendroCounter=0
+    for pid in pset:
+      for scopeset in pset[pid][scope]:
+        with open(f"dendro-{cluster}-{scope}.csv", 'a', newline='') as file:
+          writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
+          if dendrogram and scope=='MG':
+            writer.writeheader()
           cnt=-1
           for perm in scopeset:
             cnt+=1
+            zlc={}
+            oldzlc={}
             if cnt==0:
               classRepresentative=addPerm(perm)
               sol.add(classRepresentative!=NOPERM)
               permCache[str(classRepresentative)]=1
+#              row={'Equality': str(dendroCounter), 'left': str(classRepresentative), 'right': str(classRepresentative)}
+#              if dendrogram:
+#                writer.writerow(row)
+              permLeftHistory[str(dendroCounter)]=str(classRepresentative)
+              permRightHistory[str(dendroCounter)]=str(classRepresentative)
             else:
               z3perm=addPerm(perm)
               sol.add(z3perm==classRepresentative)
               if str(classRepresentative) not in dendroCache:
                 dendroCache[str(classRepresentative)]=1
                 dendroCounter+=1
+              permLeftHistory[str(dendroCounter)]=str(z3perm)
+              permRightHistory[str(dendroCounter)]=str(classRepresentative)
               permCache[str(z3perm)]=1
               leftCache[str(z3perm)]=1
-              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+#              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+#              if dendrogram:
+#                writer.writerow(row)
+            if scope in ['RG0','RG1','RG2','RG3','RG4']:
               if dendrogram:
-                writer.writerow(row)
+                oldzlc=zlc
+                zlc={}
+                if sol.check()==sat:
+                  mdl=sol.model()
+                  for item in mdl:
+                    if True:
+#                    if str(item)!='No perm':
+                      foo=str(mdl[item]).split('val!')
+                      equivClass=int(foo[1])
+                      sec=str(foo[1])
+                      if sec not in zlc and str(item)!='No perm':
+                        zlc[sec]=set()
+                      if str(item)!='No perm':
+                        zlc[sec].add(str(item))
+                  zh=hash(str(zlc))
+                  if zh!=prvh:# and scope=='RG2':
+                    if len(zlc)>oldlen:
+                      EQop='C' # class creation
+                    elif len(zlc)<oldlen:
+                      EQop='M' # transitive marge
+                    else:
+                      EQop='G' # grow a class
+                    print('"id": '+str(dendroCounter)+', "op": "'+EQop+'", "term": "'+permLeftHistory[str(dendroCounter)]+'" ,[',end='')
+                    row={'Equality': dendroCounter, 'left': str(permLeftHistory[str(dendroCounter)]), 'right': str(permRightHistory[str(dendroCounter)])}
+                    writer.writerow(row)
+                    zbuf=''
+                    for alc in zlc:
+                      zbuf+=str(zlc[alc])+','
+                    prvh=zh
+                    zbuf=zbuf[:-1]+"]"
+                    print(zbuf)
+                    oldlen=len(zlc)
               dendroCounter+=1
-      for p in permCache.keys():
-        if p not in leftCache and p not in dendroCache:
-          row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
-          if dendrogram:
-            writer.writerow(row)
-          dendroCounter+=1
+#          for p in permCache.keys():
+#            if p not in leftCache and p not in dendroCache:
+#              row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
+#              if dendrogram:
+#                writer.writerow(row)
+#              dendroCounter+=1
     localClasses={}
+    stripped={}
     if sol.check()==sat:
       mdl=sol.model()
       for item in mdl:
@@ -1847,7 +1903,12 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
       for alc in localClasses:
-        roles[scope].append(localClasses[alc])
+        if alc not in stripped:
+          stripped[alc]=set()
+        for alcm in localClasses[alc]:
+            if str(alcm[1:3])!='::':
+              stripped[alc].add(alcm) 
+        roles[scope].append(stripped[alc])
     else:
       print("reason clusterwide: UNSAT")
     sol.pop()
