@@ -1261,7 +1261,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=generate_condensate(pk,str(cl),None,True)
+      c,o,d=generate_condensate(pk,str(cl),None,True,False)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1270,7 +1270,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def generate_condensate(pk,cluster,strat,verbose,debug):
+def generate_condensate(pk,cluster,strat,verbose,debug,merged):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1297,7 +1297,11 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
   ground_counts={}
-  with open(f"clusters_{pk}.json",'r') as cz:
+  if merged:
+    cfile=f"merged_clusters_{pk}.json"
+  else:
+    cfile=f"clusters_{pk}.json"
+  with open(cfile,'r') as cz:
     czc=json.load(cz)
   scluster=str(cluster)
   cntid=0
@@ -1566,7 +1570,6 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
               parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
             if len(ard['Actions']['RG2'])>0:
               ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
-#              ard['Actions']['RG2'].add('S::'+ss+'/'+rg)
               ard['Actions']['RG2'].add('R::'+rg)
               print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
               parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
