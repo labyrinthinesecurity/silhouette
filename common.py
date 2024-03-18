@@ -21,6 +21,8 @@ run_partition=os.getenv('run_partition')
 
 RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
 RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
+RG_PATTERN2=re.compile(os.getenv("RG_PATTERN2"))
+RG_PATTERN3=re.compile(os.getenv("RG_PATTERN3"))
 
 logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
@@ -1031,6 +1033,51 @@ def entity_exists(principal_id, principal_type,token):
         return code,token, display_name,True,result
     return code,token, None,False,None
 
+def build_golden_source(wid,principalType,sFrom,sTo):
+  start=int(time.time())
+  if principalType=="User" or principalType=="Group" or principalType=="ServicePrincipal":
+    query='''
+authorizationresources
+    | where type == "microsoft.authorization/roleassignments"
+    | where tostring(properties.principalType) == "
+'''
+    query=query[:-1]+principalType
+    query=query+'''"
+    | summarize principals=make_set(properties.principalId)
+'''
+  else:
+    return None
+  results,Rtoken = fetch_resource_graph_results(query=query,token=None)
+  ppls=results[0]['principals']
+  cnt=0
+  token=None
+  Ztoken=None
+  Utoken=None
+  for aP in ppls:
+    if cnt%10==0:
+      print(" ")
+      print("COUNTER",cnt,len(ppls))
+      now=int(time.time())
+      if (now-start)>600:
+        Rtoken=None
+        Utoken=None
+        Ztoken=None
+    orpartition=aP[:2]
+    row=get_row(account,orphans,orpartition,aP)
+    if row is None or len(row)==0:
+      code,Utoken,display,exists,entity=entity_exists(aP,principalType,token=Utoken)
+      if not exists and code and int(code)==404:
+        print(aP,"not found in AAD, lets add it to orphans...")
+        answ=store_row(account,orphans,orpartition,aP,'')
+        continue
+      else:
+        print(aP,"found in AAD")
+        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,group=False,token=token)
+        print(aP," WAR is",a1)
+    else:
+      print(aP,orpartition,"found in orphans => IGNORING")
+    cnt+=1
+
 def fetch_assignments_by_id(principalId,verbose,group,token):
   starRoles={}
   query='''
@@ -1520,12 +1567,22 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
               if re.match(RG_PATTERN0,rg):
                 cosinecache[rg]=0
                 print(rg,"matches", RG_PATTERN0)
+                break
               elif re.match(RG_PATTERN1,rg):
                 cosinecache[rg]=1
                 print(rg,"matches", RG_PATTERN1)
-              else:
+                break
+              elif re.match(RG_PATTERN2,rg):
                 cosinecache[rg]=2
-                print(rg,"matches no pattern")
+                print(rg,"matches", RG_PATTERN2)
+                break
+              elif re.match(RG_PATTERN3,rg):
+                cosinecache[rg]=3
+                print(rg,"matches", RG_PATTERN3)
+                break   
+              else:
+                cosinecache[rg]=3
+                print(rg,"matches no pattern, resorting to RG4")
             rgcat='RG'+str(cosinecache[rg])
             print("CAT",rgcat)
             ard['Actions'][rgcat]=set()
@@ -1807,7 +1864,11 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     'RG3': [],
     'RG4': []
   }
+  zzz=''
+  print('[',end='')
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
+    zbuf='{"scope": "'+scope+'", "timeseries": ['
+    zbuf0=zbuf
     if os.path.exists(f"dendro-{cluster}-{scope}.csv"):
       os.remove(f"dendro-{cluster}-{scope}.csv")
     sol.push()
@@ -1876,23 +1937,18 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
                       EQop='M' # transitive marge
                     else:
                       EQop='G' # grow a class
-                    print('"id": '+str(dendroCounter)+', "op": "'+EQop+'", "term": "'+permLeftHistory[str(dendroCounter)]+'" ,[',end='')
+                    zbuf+='{"id": '+str(dendroCounter)+', "op": "'+EQop+'", "equality": {"LHS": "'+permLeftHistory[str(dendroCounter)]+'", "RHS": "'+permRightHistory[str(dendroCounter)]+'"} , "classes": ['
                     row={'Equality': dendroCounter, 'left': str(permLeftHistory[str(dendroCounter)]), 'right': str(permRightHistory[str(dendroCounter)])}
                     writer.writerow(row)
-                    zbuf=''
+                    #zbuf=''
                     for alc in zlc:
-                      zbuf+=str(zlc[alc])+','
+                      zbuf+=str(zlc[alc]).replace('\'','\"').replace('{','[').replace('}',']')+','
                     prvh=zh
-                    zbuf=zbuf[:-1]+"]"
-                    print(zbuf)
+                    zbuf=zbuf[:-1]+"]},"
                     oldlen=len(zlc)
               dendroCounter+=1
-#          for p in permCache.keys():
-#            if p not in leftCache and p not in dendroCache:
-#              row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
-#              if dendrogram:
-#                writer.writerow(row)
-#              dendroCounter+=1
+    if len(zbuf)-len(zbuf0)>0:
+      zzz+=zbuf[:-1]+']},\n'
     localClasses={}
     stripped={}
     if sol.check()==sat:
@@ -1915,9 +1971,10 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     else:
       print("reason clusterwide: UNSAT")
     sol.pop()
+  print(zzz[:-2]+']\n') 
   return roles
 
-cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': [{'x'}], 'RG4': set()},
         "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
         "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()}
                 }

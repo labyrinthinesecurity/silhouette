@@ -1,4 +1,4 @@
 #!/usr/bin/python3
 from common import *
 
-compare_by_type(wid,"ServicePrincipal",timeBack,timeNow)
+build_golden_source(wid,"ServicePrincipal",timeBack,timeNow)
