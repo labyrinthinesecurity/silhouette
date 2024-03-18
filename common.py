@@ -1995,6 +1995,6 @@ print("unused",unused)
 print("orphans",orphans)
 timeNow=datetime.today().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 timeBack=(datetime.today()-timedelta(days=logsRetention)).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+
 print("time now:",timeNow)
 print("time back:",timeBack)
-
