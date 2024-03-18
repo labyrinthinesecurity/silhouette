@@ -21,6 +21,8 @@ run_partition=os.getenv('run_partition')
 
 RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
 RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
+RG_PATTERN2=re.compile(os.getenv("RG_PATTERN2"))
+RG_PATTERN3=re.compile(os.getenv("RG_PATTERN3"))
 
 logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
@@ -1031,6 +1033,51 @@ def entity_exists(principal_id, principal_type,token):
         return code,token, display_name,True,result
     return code,token, None,False,None
 
+def build_golden_source(wid,principalType,sFrom,sTo):
+  start=int(time.time())
+  if principalType=="User" or principalType=="Group" or principalType=="ServicePrincipal":
+    query='''
+authorizationresources
+    | where type == "microsoft.authorization/roleassignments"
+    | where tostring(properties.principalType) == "
+'''
+    query=query[:-1]+principalType
+    query=query+'''"
+    | summarize principals=make_set(properties.principalId)
+'''
+  else:
+    return None
+  results,Rtoken = fetch_resource_graph_results(query=query,token=None)
+  ppls=results[0]['principals']
+  cnt=0
+  token=None
+  Ztoken=None
+  Utoken=None
+  for aP in ppls:
+    if cnt%10==0:
+      print(" ")
+      print("COUNTER",cnt,len(ppls))
+      now=int(time.time())
+      if (now-start)>600:
+        Rtoken=None
+        Utoken=None
+        Ztoken=None
+    orpartition=aP[:2]
+    row=get_row(account,orphans,orpartition,aP)
+    if row is None or len(row)==0:
+      code,Utoken,display,exists,entity=entity_exists(aP,principalType,token=Utoken)
+      if not exists and code and int(code)==404:
+        print(aP,"not found in AAD, lets add it to orphans...")
+        answ=store_row(account,orphans,orpartition,aP,'')
+        continue
+      else:
+        print(aP,"found in AAD")
+        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,group=False,token=token)
+        print(aP," WAR is",a1)
+    else:
+      print(aP,orpartition,"found in orphans => IGNORING")
+    cnt+=1
+
 def fetch_assignments_by_id(principalId,verbose,group,token):
   starRoles={}
   query='''
@@ -1261,7 +1308,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=generate_condensate(pk,str(cl),None,True)
+      c,o,d=generate_condensate(pk,str(cl),None,True,False)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1270,7 +1317,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def generate_condensate(pk,cluster,strat,verbose,debug):
+def generate_condensate(pk,cluster,strat,verbose,debug,merged):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1297,7 +1344,11 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
   ground_counts={}
-  with open(f"clusters_{pk}.json",'r') as cz:
+  if merged:
+    cfile=f"merged_clusters_{pk}.json"
+  else:
+    cfile=f"clusters_{pk}.json"
+  with open(cfile,'r') as cz:
     czc=json.load(cz)
   scluster=str(cluster)
   cntid=0
@@ -1516,12 +1567,22 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
               if re.match(RG_PATTERN0,rg):
                 cosinecache[rg]=0
                 print(rg,"matches", RG_PATTERN0)
+                break
               elif re.match(RG_PATTERN1,rg):
                 cosinecache[rg]=1
                 print(rg,"matches", RG_PATTERN1)
-              else:
+                break
+              elif re.match(RG_PATTERN2,rg):
                 cosinecache[rg]=2
-                print(rg,"matches no pattern")
+                print(rg,"matches", RG_PATTERN2)
+                break
+              elif re.match(RG_PATTERN3,rg):
+                cosinecache[rg]=3
+                print(rg,"matches", RG_PATTERN3)
+                break   
+              else:
+                cosinecache[rg]=3
+                print(rg,"matches no pattern, resorting to RG4")
             rgcat='RG'+str(cosinecache[rg])
             print("CAT",rgcat)
             ard['Actions'][rgcat]=set()
@@ -1556,22 +1617,27 @@ def generate_condensate(pk,cluster,strat,verbose,debug):
                         print("artificially adding perm microsoft.network/routetables/write")
             if len(ard['Actions']['RG0'])>0:
               ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
+              ard['Actions']['RG0'].add('R::'+rg)
               print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
               parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
             if len(ard['Actions']['RG1'])>0:
               ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
+              ard['Actions']['RG1'].add('R::'+rg)
               print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
               parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
             if len(ard['Actions']['RG2'])>0:
               ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
+              ard['Actions']['RG2'].add('R::'+rg)
               print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
               parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
             if len(ard['Actions']['RG3'])>0:
               ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
+              ard['Actions']['RG3'].add('R::'+rg)
               print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
               parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
             if len(ard['Actions']['RG4'])>0:
               ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
+              ard['Actions']['RG4'].add('R::'+rg)
               print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
               parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
@@ -1798,44 +1864,93 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     'RG3': [],
     'RG4': []
   }
+  zzz=''
+  print('[',end='')
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
+    zbuf='{"scope": "'+scope+'", "timeseries": ['
+    zbuf0=zbuf
+    if os.path.exists(f"dendro-{cluster}-{scope}.csv"):
+      os.remove(f"dendro-{cluster}-{scope}.csv")
     sol.push()
-    dendroCounter=0
     dendroCache={}
     permCache={}
     leftCache={}
-    with open(f"dendro-{cluster}-{scope}.csv", 'w', newline='') as file:
-      writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
-      if dendrogram:
-        writer.writeheader()
-      for pid in pset:
-        for scopeset in pset[pid][scope]:
+    permLeftHistory={}
+    permRightHistory={}
+    prvh=0
+    oldlen=0
+    dendroCounter=0
+    for pid in pset:
+      for scopeset in pset[pid][scope]:
+        with open(f"dendro-{cluster}-{scope}.csv", 'a', newline='') as file:
+          writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
+          if dendrogram and scope=='MG':
+            writer.writeheader()
           cnt=-1
           for perm in scopeset:
             cnt+=1
+            zlc={}
+            oldzlc={}
             if cnt==0:
               classRepresentative=addPerm(perm)
               sol.add(classRepresentative!=NOPERM)
               permCache[str(classRepresentative)]=1
+#              row={'Equality': str(dendroCounter), 'left': str(classRepresentative), 'right': str(classRepresentative)}
+#              if dendrogram:
+#                writer.writerow(row)
+              permLeftHistory[str(dendroCounter)]=str(classRepresentative)
+              permRightHistory[str(dendroCounter)]=str(classRepresentative)
             else:
               z3perm=addPerm(perm)
               sol.add(z3perm==classRepresentative)
               if str(classRepresentative) not in dendroCache:
                 dendroCache[str(classRepresentative)]=1
                 dendroCounter+=1
+              permLeftHistory[str(dendroCounter)]=str(z3perm)
+              permRightHistory[str(dendroCounter)]=str(classRepresentative)
               permCache[str(z3perm)]=1
               leftCache[str(z3perm)]=1
-              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+#              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
+#              if dendrogram:
+#                writer.writerow(row)
+            if scope in ['RG0','RG1','RG2','RG3','RG4']:
               if dendrogram:
-                writer.writerow(row)
+                oldzlc=zlc
+                zlc={}
+                if sol.check()==sat:
+                  mdl=sol.model()
+                  for item in mdl:
+                    if True:
+#                    if str(item)!='No perm':
+                      foo=str(mdl[item]).split('val!')
+                      equivClass=int(foo[1])
+                      sec=str(foo[1])
+                      if sec not in zlc and str(item)!='No perm':
+                        zlc[sec]=set()
+                      if str(item)!='No perm':
+                        zlc[sec].add(str(item))
+                  zh=hash(str(zlc))
+                  if zh!=prvh:# and scope=='RG2':
+                    if len(zlc)>oldlen:
+                      EQop='C' # class creation
+                    elif len(zlc)<oldlen:
+                      EQop='M' # transitive marge
+                    else:
+                      EQop='G' # grow a class
+                    zbuf+='{"id": '+str(dendroCounter)+', "op": "'+EQop+'", "equality": {"LHS": "'+permLeftHistory[str(dendroCounter)]+'", "RHS": "'+permRightHistory[str(dendroCounter)]+'"} , "classes": ['
+                    row={'Equality': dendroCounter, 'left': str(permLeftHistory[str(dendroCounter)]), 'right': str(permRightHistory[str(dendroCounter)])}
+                    writer.writerow(row)
+                    #zbuf=''
+                    for alc in zlc:
+                      zbuf+=str(zlc[alc]).replace('\'','\"').replace('{','[').replace('}',']')+','
+                    prvh=zh
+                    zbuf=zbuf[:-1]+"]},"
+                    oldlen=len(zlc)
               dendroCounter+=1
-      for p in permCache.keys():
-        if p not in leftCache and p not in dendroCache:
-          row={'Equality': str(dendroCounter), 'left': str(p), 'right': str(p)}
-          if dendrogram:
-            writer.writerow(row)
-          dendroCounter+=1
+    if len(zbuf)-len(zbuf0)>0:
+      zzz+=zbuf[:-1]+']},\n'
     localClasses={}
+    stripped={}
     if sol.check()==sat:
       mdl=sol.model()
       for item in mdl:
@@ -1847,13 +1962,19 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
             localClasses[sec]=set()
           localClasses[sec].add(str(item))
       for alc in localClasses:
-        roles[scope].append(localClasses[alc])
+        if alc not in stripped:
+          stripped[alc]=set()
+        for alcm in localClasses[alc]:
+            if str(alcm[1:3])!='::':
+              stripped[alc].add(alcm) 
+        roles[scope].append(stripped[alc])
     else:
       print("reason clusterwide: UNSAT")
     sol.pop()
+  print(zzz[:-2]+']\n') 
   return roles
 
-cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
+cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': [{'x'}], 'RG4': set()},
         "p2": {'MG': set(), 'SUB': set(), 'RG0': [{'e', 'f', 'g'}, {'c', 'd'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()},
         "p3": {'MG': set(), 'SUB': set(), 'RG0': [{'b'}, {'f', 'a'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': set(), 'RG4': set()}
                 }
