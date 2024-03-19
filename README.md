@@ -87,7 +87,15 @@ A traditional approach for dealing with data value is to reason in terms of avai
 
 Set build_goldensource, build_groundsource, unused and orphans tables to empty tables in your azure storage account.
 
-Run collect.py to populate build_goldensource, build_groundsource, unused and orphans tables.
+Run collect_goldensource.py to populate 3 tables: build_goldensource unused principals and orphans.
+
+In the build_goldensource table that was just generated, pickup the UUID of the partition.
+
+Set this UUID to an environment variable called "run_partition"
+
+Create a blob container named with this UUID.
+
+Then, run collect_groundsource.py to populate the build_groundsource table. It will also cache the logs in the blob container to save time for later.
 
 Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20 hours in a typical production environment whith thousands of SPNs.
 
