@@ -1033,6 +1033,48 @@ def entity_exists(principal_id, principal_type,token):
         return code,token, display_name,True,result
     return code,token, None,False,None
 
+def build_ground_source(wid,principalType,sFrom,sTo,verbose):
+  start=int(time.time())
+  if principalType=="User" or principalType=="Group" or principalType=="ServicePrincipal":
+    query='''
+authorizationresources
+    | where type == "microsoft.authorization/roleassignments"
+    | where tostring(properties.principalType) == "
+'''
+    query=query[:-1]+principalType
+    query=query+'''"
+    | summarize principals=make_set(properties.principalId)
+'''
+  else:
+    return None
+  results,Rtoken = fetch_resource_graph_results(query=query,token=None)
+  ppls=results[0]['principals']
+  cnt=-1
+  token=None
+  Ztoken=None
+  Utoken=None
+  for aP in ppls:
+    cnt+=1
+    if cnt%10==0:
+      print(" ")
+      print("COUNTER",cnt,len(ppls))
+      now=int(time.time())
+      if (now-start)>600:
+        Rtoken=None
+        Utoken=None
+        Ztoken=None
+    orpartition=aP[:2]
+    row=get_row(account,orphans,orpartition,aP)
+    if row is None or len(row)==0:
+      code,Utoken,display,exists,entity=entity_exists(aP,principalType,token=Utoken)
+      if not exists and code and int(code)==404:
+        print(aP,"not found in AAD, lets add it to orphans...")
+        answ=store_row(account,orphans,orpartition,aP,'')
+        continue
+      else:
+        print(aP,"found in AAD")
+        zperms,isUsed,gsource,ground,actionXscope,token=build_ground_truth(wid,aP,display,sFrom,sTo,token,verbose)
+
 def build_golden_source(wid,principalType,sFrom,sTo):
   start=int(time.time())
   if principalType=="User" or principalType=="Group" or principalType=="ServicePrincipal":
