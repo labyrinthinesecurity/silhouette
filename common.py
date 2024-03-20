@@ -298,7 +298,7 @@ def store_row(account,table,PK,RK,payload):
       return False 
   return False
 
-def store_row5u(account,table,PK,RK,display,enabled,created,ptype,payload):
+def store_unused(account,table,PK,RK,display,enabled,created,ptype,payload):
   SAS=os.getenv(f"{account}_sas")
   if display is None:
     dname=''
@@ -400,7 +400,7 @@ def store_row7(account,table,PK,RK,display,swar,gwar,sda,gda,sSresolution,sWreso
       return False
   return False
 
-def store_row8(account,table,PK,RK,display,gwar,swar,gSresolution,gWresolution,gAresolution,sSresolution,sWresolution,sAresolution,gda,sda,payload):
+def store_groundsource(account,table,PK,RK,display,gwar,swar,gSresolution,gWresolution,gAresolution,sSresolution,sWresolution,sAresolution,gda,sda,payload):
   SAS=os.getenv(f"{account}_sas")
   if display is None:
     dname=''
@@ -418,19 +418,19 @@ def store_row8(account,table,PK,RK,display,gwar,swar,gSresolution,gWresolution,g
       return True
   except urllib.error.HTTPError as e:
     logging.info("code %s",str(e.code))
-    print("Store row8 code",str(e.code))
+    print("Store groundsource code",str(e.code),table)
   except urllib.error.URLError as e:
     if hasattr(e, 'reason'):
       logging.info("reason %s",str(e.reason))
-      print("Store row8 reason",str(e.reason))
+      print("Store groundsource reason",str(e.reason),table)
     elif hasattr(e, 'code'):
       logging.info("code2 %s",str(e.code))
-      print("Store row8 code2",str(e.code))
+      print("Store groundsource code2",str(e.code),table)
   except ConnectionResetError as e:
-      print("Store row8 Connection was reset by the peer: ", e)
+      print("Store groundsource  Connection was reset by the peer: ", e)
       return False
   except Exception as e:
-      print("Store row8 An unexpected error occurred: ", e)
+      print("Store groundsource An unexpected error occurred: ", e)
       return False
   return False
 
@@ -517,7 +517,7 @@ AzureActivity
       if attempt < max_retries+1:
         time.sleep(10)
 
-def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
+def fetch_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
   token=None
   actionXscope={}
   row=get_row(account,run_goldensource,run_partition,principalId)
@@ -669,8 +669,7 @@ def build_ground_truth(wid,principalId,display,sFrom,sTo,token,verbose):
   isUsed=False
   if len(war)>0 or len(da)>0:
     isUsed=True
-    if not verbose:
-      store_row8(account,build_groundsource,build_partition,principalId,display,war,gsource['war'],Sresolution,Wresolution,Aresolution,gsource['Sresolution'],gsource['Wresolution'],gsource['Aresolution'],da,gsource['da'],json.dumps(ground))
+    store_groundsource(account,run_groundsource,run_partition,principalId,display,war,gsource['war'],Sresolution,Wresolution,Aresolution,gsource['Sresolution'],gsource['Wresolution'],gsource['Aresolution'],da,gsource['da'],json.dumps(ground))
   return zperms,isUsed,gsource,ground,actionXscope,token
 
 def fetch_resource_graph_results(query,token):
@@ -1073,7 +1072,9 @@ authorizationresources
         continue
       else:
         print(aP,"found in AAD")
-        zperms,isUsed,gsource,ground,actionXscope,token=build_ground_truth(wid,aP,display,sFrom,sTo,token,verbose)
+        zperms,isUsed,gsource,ground,actionXscope,token=fetch_ground_truth(wid,aP,display,sFrom,sTo,token,verbose)
+        if isUsed==False:
+            store_unused(account,unused,build_partition,aP,display,entity['accountEnabled'],entity['createdDateTime'],entity['servicePrincipalType'],json.dumps(gsource))
 
 def build_golden_source(wid,principalType,sFrom,sTo):
   start=int(time.time())
@@ -1330,7 +1331,7 @@ def investigate_principalId(pk,principalId,verbose):
   golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,notdactions,token=fetch_assignments_by_id(principalId,verbose=verbose,group=False,token=None)
   if war is None:
     return None,None,None,None,None,None,None,None,None,None
-  ground_permset,isUsed,gsource,ground,axs,token=build_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
+  ground_permset,isUsed,gsource,ground,axs,token=fetch_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
   return golden_permset,ground_permset,axs,da,super_res,write_res,action_res,read_res,dactions,notdactions
 
 def build_silhouette(pk,render):
