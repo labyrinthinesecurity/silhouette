@@ -19,7 +19,7 @@ The last indicator (the reward) is generated with the help of the distance induc
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/sil.PNG" width="50%">
 
-In practice, it is not reasonable to try to de-escalate to the inner score, because the inner score is always scoped at resource level, by definition of LAW logs. To avoid generating an unscalable number of roles, you want to scopre permissions at resource group level (or higher). Let's call it the desired score.
+In practice, it is not reasonable to try to de-escalate to the inner score, because the inner score is always scoped at resource level, by definition of LAW logs. To avoid generating an unscalable number of roles, you want to scope permissions at resource group level (or higher). Let's call it the desired score.
 
 Your desired score is always going to be a WAR norm belonging to the interval [inner score, outer score].
 
@@ -37,12 +37,12 @@ By measuring the golden source permissions of a cluster to the origin and its gr
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
-## pre-requisites
-- Python
+## Pre-requisites
+- Python 3.6 or later
 - An Azure Table to store Azure silhouette data
 - A Log Analytics Workspace where your Azure Activity Logs are centralized
 
-## configure
+## Configure
 
 Most of the code is held in file common.py
 
@@ -61,7 +61,7 @@ The first time you run silhouette (step 1 below), you don't have a run_goldensou
 
 You may also wish to adjust logsRetention, the Log Analytics retention parameter (in days), which is 90 days by default. Don't set this parameter to 0. This global variable is declared in common.py
 
-## known current limitations (work in progress)
+## Known current limitations (work in progress)
 
 Since Silhouette ultimately relies on Azure Activity Logs to perform its audit, read actions are not captured. (Azure Activity only captures write/delete and actions)
 
@@ -69,7 +69,7 @@ For now, roles related to role assignments or role definitions (from the Microso
 
 Finally, roles assigned at any scope below resource groups are being ignored.
 
-## how to overcome current limitations?
+### how to overcome current limitations?
 
 For now, unsupported permissions must be added manually to any role definition proposed by Silhouette.
 
@@ -83,9 +83,11 @@ A traditional approach for dealing with data value is to reason in terms of avai
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/rbac_distance.jpeg" width="40%">
 
-## step 1A: collect
+## Step 1: Collect sources from Azure backends
 
 Set build_goldensource, build_groundsource, unused and orphans tables to empty tables in your azure storage account.
+
+### Collect Golden source from Entra
 
 Run collect_goldensource.py to populate 3 tables: build_goldensource unused principals and orphans.
 
@@ -95,23 +97,26 @@ Set this UUID to an environment variable called "run_partition"
 
 Create a blob container named with this UUID.
 
+### Collect and cache ground source from Azure Log Analytics
+
 Then, run collect_groundsource.py to populate the build_groundsource table. It will also cache the logs in the blob container to save time for later.
 
 Warning: due to Azure throttling, this step takes a long time. Typically 4 to 20 hours in a typical production environment whith thousands of SPNs.
 
-## step 1B: prepare RUN
 
-Now that the build process is over, you may set run_goldensource and run_groundsource to the build_goldensource and build_groundsource tables, respectively.
+## Step 2: Machine learning
+
+Now that the collect process, you may set run_goldensource and run_groundsource to the build_goldensource and build_groundsource tables, respectively.
 
 You should then set your build_goldensource and build_groundsource variables to othertables, to avoid accidental overwritting of the run tables if you run collect.py once again!
 
-## step 2: machine learning
+### Run k-means
 
 Run clusterize.py to group SPNs into similarity clusters. This should take less than a minute.
 
 The script generates a CSV file to be consumed by minimize.py in step 3.
 
-## step 3: calculate and visualize current and desired silhouettes
+## Step 3: Calculate and visualize current and desired silhouettes
 
 Run minimize.py
 
@@ -122,7 +127,7 @@ This will generate a bar chart file called silhouette_{name_of_your_run_partitio
 De-escalation is based on logs collected from your Log Analytics workspace. To optimize logs retrieval from Azure backends, they are cached in a container sitting in your storage account.
 Create a container called with the name of your build_partition
 
-## customize role definitions of a cluster
+## Customize role definitions of a cluster
 
 Now pick a cluster ID from the above mentioned CSV and stick it to the function called in condensate.py
 
@@ -140,7 +145,7 @@ condensate will help you reshape (or create) built-in role definitions, clusterw
 
 If you set debug to True, generate_condensate.py will also dump a file called clustername_ground_permissions.json that will help you understand whih SPN in the cluster is producing which ground permission, and in which scope. In our example with cluster 7, the file generated is called 7_ground_permissions.json
 
-## fine-tuning (clusterwide, not per SPN!)
+## Fine-tuning (clusterwide, not per SPN!)
 
 Ground truth permissions operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group, subscription, or, whenever possible, resource group level.
 
