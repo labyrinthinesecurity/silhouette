@@ -19,10 +19,16 @@ orphans = os.getenv(f"{account}_orphans")
 unused = os.getenv(f"{account}_unused")
 run_partition=os.getenv('run_partition')
 
-RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
-RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
-RG_PATTERN2=re.compile(os.getenv("RG_PATTERN2"))
-RG_PATTERN3=re.compile(os.getenv("RG_PATTERN3"))
+try:
+  RG_PATTERN0=re.compile(os.getenv("RG_PATTERN0"))
+  RG_PATTERN1=re.compile(os.getenv("RG_PATTERN1"))
+  RG_PATTERN2=re.compile(os.getenv("RG_PATTERN2"))
+  RG_PATTERN3=re.compile(os.getenv("RG_PATTERN3"))
+except:
+  RG_PATTERN0=re.compile('.*')
+  RG_PATTERN1=re.compile('.*')
+  RG_PATTERN2=re.compile('.*')
+  RG_PATTERN3=re.compile('.*')
 
 logsRetention=90 # Log Analytics retention, in days. MUST be greater than 0.
 
