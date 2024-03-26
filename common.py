@@ -803,7 +803,6 @@ def classify_war_permission(permission,resolution,verbose):
           wpd=permission+":R:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"R",resolution)
         return "read",segments[0]
 
     if permission == "*" or permission == "/*":
@@ -812,21 +811,18 @@ def classify_war_permission(permission,resolution,verbose):
           wpd=permission+":A:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"A",resolution)
         return "action",segments[0]
       elif resolution>=6:
         if verbose:
           wpd=permission+":W:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"W",resolution)
         return "write/delete",segments[0]
       else:
         if verbose:
           wpd=permission+":S:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"S",resolution)
         return "superadmin",segments[0]
     
     if "microsoft.authorization/" in lowperms:
@@ -851,7 +847,6 @@ def classify_war_permission(permission,resolution,verbose):
             wpd=permission+":S:"+str(resolution)
             if wpd not in warpermdict:
               warpermdict[wpd]=0
-#              print(permission,"S",resolution)
         return "superadmin",rp
 
     if "write" in segments[-1:][0].lower() or "delete" in segments[-1:][0].lower():
@@ -859,27 +854,23 @@ def classify_war_permission(permission,resolution,verbose):
           wpd=permission+":W:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"W",resolution)
         return "write/delete",rp
     elif "action" in segments[-1:][0].lower():
         if verbose:
           wpd=permission+":A:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"A",resolution)
         return "action",rp
     elif "read" in segments[-1:][0].lower():
         if verbose:
           wpd=permission+":R:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-#            print(permission,"R",resolution)
         return "read",rp
     if verbose:
       wpd=permissions+":U:"+str(resolution)
       if wpd not in warpermdict:
         warpermdict[wpd]=0
-#        print(permission,"U",resolution)
     return "unknown",segments[0]
 
 def classify_da_permission(permission):
@@ -1062,7 +1053,7 @@ authorizationresources
     cnt+=1
     if cnt%10==0:
       print(" ")
-      print("COUNTER",cnt,len(ppls))
+      print("Progress status",cnt,len(ppls))
       now=int(time.time())
       if (now-start)>600:
         Rtoken=None
@@ -1105,7 +1096,7 @@ authorizationresources
   for aP in ppls:
     if cnt%10==0:
       print(" ")
-      print("COUNTER",cnt,len(ppls))
+      print("Progress status:",cnt,len(ppls))
       now=int(time.time())
       if (now-start)>600:
         Rtoken=None
@@ -1122,7 +1113,7 @@ authorizationresources
       else:
         print(aP,"found in AAD")
         pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,group=False,token=token)
-        print(aP," WAR is",a1)
+        #print(aP," WAR is",a1)
     else:
       print(aP,orpartition,"found in orphans => IGNORING")
     cnt+=1
@@ -1209,7 +1200,6 @@ authorizationresources
         gdn=ag['displayName']
       else:
         gdn=''
-#      print("  group ",gr,gdn)
       if dac:
         dactions.update(dac)
       if notdac:
@@ -1217,7 +1207,7 @@ authorizationresources
       permset.update(pset)
       combined+=cbr 
       if sc is not None and len(sc)>0:
-        print("group __+__",sc)
+        print("(recursively analyzing AAD group)",sc)
       super_classes.update(sc)
       super_res.update(sr)
       write_delete_classes.update(wc)
@@ -1436,7 +1426,6 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
     else:
       mrr=0
     maxres=max(msr,mwr,mar,mrr)
-    #print(record,"SRES",sres,"WRES",wres,"ARES",ares,"RRES",rres,"MAXRES",maxres)
     if len(da)>0:
       das.append(pid)
     axsdict[pid]=axs
@@ -1585,7 +1574,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
         else:
           strategy[aw]=strat
     print("STRATEGY",strategy)
-    print("max Subs:",maxSubs,"max RGs:",maxRGs)
+#    print("max Subs:",maxSubs,"max RGs:",maxRGs)
     ard={}
     ard['Actions']={
               'RG0': set(),
@@ -1611,7 +1600,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
       if strategy[aw]=='RG':
         for ss in sxadict[aw]: 
           for rg in sxadict[aw][ss]:
-            print("NEW RG set",rg," ",end='')
+            #print("NEW RG set",rg," ",end='')
             if rg not in cosinecache:
               if re.match(RG_PATTERN0,rg):
                 cosinecache[rg]=0
@@ -1627,63 +1616,69 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                 print(rg,"matches", RG_PATTERN3)
               else:
                 cosinecache[rg]=3
-                print(rg,"matches no pattern, resorting to RG4")
+                #print(rg,"matches no pattern, resorting to RG4")
             rgcat='RG'+str(cosinecache[rg])
-            print("CAT",rgcat)
+            #print("CAT",rgcat)
             ard['Actions'][rgcat]=set()
             for nm in sxadict[aw][ss][rg]:
               for an in sxadict[aw][ss][rg]:
                 if an==nm:
+                  #print('reviewing',aw,ss,rg,an)
                   for ac in sxadict[aw][ss][rg][an]:
                     # Local R actions are absorbed by local A actions
                     if aw=='R' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                      #print("  case R absorbed by A: rg",rg,"cat",rgcat,"absorbed",ac)
                       pass
                     # Local R and A actions are absorbed by local W actions
                     elif aw!='W' and strategy['W'] is not None and strategy['W']=='RG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
+                      #print("  case R+A absorbed by W: rg",rg,"cat",rgcat,"absorbed",ac)
                       pass
                     else:
                       # Local W actions cannot be absorbed by an upper authority. So we add them. 
                       ard['Actions'][rgcat].add(ac)
-                      print("  Case W: rg",rg,"cat",rgcat,"add",ac)
+                      #print("  Case W: rg",rg,"cat",rgcat,"add",ac)
 #                      else:
                         # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
 #                        pass
                   # Local W absorbs local A actions (so RG actions)
                   if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     for ac in sxadict['A'][ss][rg][an]:
-                      print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
+                      #print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
                       ard['Actions'][rgcat].add(ac)
                   # Local W and local A absorb local R actions
                   if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                     for ac in sxadict['R'][ss][rg][an]:
-                      print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
+                      #print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
                       ard['Actions'][rgcat].add(ac)
-                      if cluster=="20":
-                        print("artificially adding perm microsoft.network/routetables/write")
             if len(ard['Actions']['RG0'])>0:
               ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
-              ard['Actions']['RG0'].add('R::'+rg)
-              print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
+#              ard['Actions']['RG0'].add('R::'+rg)
+              ard['Actions']['RG0'].add('S::'+ss+'/'+rg)
+              #print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
               parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
             if len(ard['Actions']['RG1'])>0:
               ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
-              ard['Actions']['RG1'].add('R::'+rg)
-              print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
+#              ard['Actions']['RG1'].add('R::'+rg)
+              ard['Actions']['RG1'].add('S::'+ss+'/'+rg)
+              #print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
               parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
             if len(ard['Actions']['RG2'])>0:
               ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
-              ard['Actions']['RG2'].add('R::'+rg)
-              print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
+#              ard['Actions']['RG2'].add('R::'+rg)
+              ard['Actions']['RG2'].add('S::'+ss+'/'+rg)
+              #print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
               parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
             if len(ard['Actions']['RG3'])>0:
               ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
-              ard['Actions']['RG3'].add('R::'+rg)
-              print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
+#              ard['Actions']['RG3'].add('R::'+rg)
+              ard['Actions']['RG3'].add('S::'+ss+'/'+rg)
+              #print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
               parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
             if len(ard['Actions']['RG4'])>0:
               ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
-              ard['Actions']['RG4'].add('R::'+rg)
-              print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
+#              ard['Actions']['RG4'].add('R::'+rg)
+              ard['Actions']['RG4'].add('S::'+ss+'/'+rg)
+              #print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
               parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
         for ss in sxadict[aw]:
@@ -1750,30 +1745,27 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-    print("parent sets")
-    for aP in parent_sets:
-      print("  principal",aP,p2n[aP])
-      print("  ..",parent_sets[aP])
-    print(" ")
+    #print("parent sets")
+    #for aP in parent_sets:
+    #  print("  principal",aP,p2n[aP])
+    #  print("  ..",parent_sets[aP])
+    #print(" ")
     desired_roles=reason_clusterwide(cluster,parent_sets,debug)
-    print("REASONING")
-    print(desired_roles)
-    print("")
+    #print("REASONING")
+    #print(desired_roles)
+    #print("")
     for s in [ 'MG', 'SUB', 'RG0', 'RG1', 'RG2', 'RG3', 'RG4' ]:
       if s=='MG':
         resolution=2
       elif s=='SUB':
         resolution=3
-      #elif s=='RG':
       else:
          resolution=4
       for pset in desired_roles[s]:
-        print(s,"pset",list(pset))
-        print(s,"desired BEFORE",desired[s])
+        #print(s,"pset",list(pset))
+        #print(s,"desired BEFORE",desired[s])
         partition_permissions(list(pset),resolution,desired[s])
-        print(s,"desired AFTER",desired[s])
-#      print(" ")
-#    print(" ")
+        #print(s,"desired AFTER",desired[s])
     desired_counts= {
             'MG': {},
             'SUB': {},
@@ -1812,18 +1804,11 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
     print("")
     print("Cluster condensate:")
     print(desired_roles)
-#    print("Individual Role Definitions wihout EQ:",len(ards))
-#    print(json.dumps(ards,indent=2))
-#    print("Name X Scope X Action")
-#    print(json.dumps(axsdict,indent=2))
-#    print("...")
-#    print("Scope X Name X Action")
-#    print(json.dumps(sxadict,indent=2))
   return counts,outerscore,desiredscore
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
-  print(account,table,PK)
+  #print(account,table,PK)
   url=f"https://{account}.table.core.windows.net/{table}()?$filter=PartitionKey%20eq%20%27"+PK+"%27&"+SAS
   headers={'Accept': 'application/json;odata=nometadata'}
   req=urllib.request.Request(url=url, data=None, headers=headers)
@@ -1909,13 +1894,12 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     'RG3': [],
     'RG4': []
   }
-  zzz=''
-  print('[',end='')
+  #zzz=''
+  #print('[',end='')
+  zzz='['
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
     zbuf='{"scope": "'+scope+'", "timeseries": ['
     zbuf0=zbuf
-    if os.path.exists(f"dendro-{cluster}-{scope}.csv"):
-      os.remove(f"dendro-{cluster}-{scope}.csv")
     sol.push()
     dendroCache={}
     permCache={}
@@ -1927,10 +1911,7 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     dendroCounter=0
     for pid in pset:
       for scopeset in pset[pid][scope]:
-        with open(f"dendro-{cluster}-{scope}.csv", 'a', newline='') as file:
-          writer = csv.DictWriter(file, fieldnames=["Equality","left","right"])
-          if dendrogram and scope=='MG':
-            writer.writeheader()
+        if True:
           cnt=-1
           for perm in scopeset:
             cnt+=1
@@ -1940,9 +1921,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
               classRepresentative=addPerm(perm)
               sol.add(classRepresentative!=NOPERM)
               permCache[str(classRepresentative)]=1
-#              row={'Equality': str(dendroCounter), 'left': str(classRepresentative), 'right': str(classRepresentative)}
-#              if dendrogram:
-#                writer.writerow(row)
               permLeftHistory[str(dendroCounter)]=str(classRepresentative)
               permRightHistory[str(dendroCounter)]=str(classRepresentative)
             else:
@@ -1955,9 +1933,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
               permRightHistory[str(dendroCounter)]=str(classRepresentative)
               permCache[str(z3perm)]=1
               leftCache[str(z3perm)]=1
-#              row={'Equality': str(dendroCounter), 'left': str(z3perm), 'right': str(classRepresentative)}
-#              if dendrogram:
-#                writer.writerow(row)
             if scope in ['RG0','RG1','RG2','RG3','RG4']:
               if dendrogram:
                 oldzlc=zlc
@@ -1966,7 +1941,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
                   mdl=sol.model()
                   for item in mdl:
                     if True:
-#                    if str(item)!='No perm':
                       foo=str(mdl[item]).split('val!')
                       equivClass=int(foo[1])
                       sec=str(foo[1])
@@ -1983,9 +1957,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
                     else:
                       EQop='G' # grow a class
                     zbuf+='{"id": '+str(dendroCounter)+', "op": "'+EQop+'", "equality": {"LHS": "'+permLeftHistory[str(dendroCounter)]+'", "RHS": "'+permRightHistory[str(dendroCounter)]+'"} , "classes": ['
-                    row={'Equality': dendroCounter, 'left': str(permLeftHistory[str(dendroCounter)]), 'right': str(permRightHistory[str(dendroCounter)])}
-                    writer.writerow(row)
-                    #zbuf=''
                     for alc in zlc:
                       zbuf+=str(zlc[alc]).replace('\'','\"').replace('{','[').replace('}',']')+','
                     prvh=zh
@@ -2016,7 +1987,27 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     else:
       print("reason clusterwide: UNSAT")
     sol.pop()
-  print(zzz[:-2]+']\n') 
+  jrs=zzz[:-2]+']\n'
+  jr=json.loads(jrs)
+  with open('timelines.json','w') as file:
+    json.dump(jr,file,indent=2)
+  jroles=[]
+  for ascope in jr:
+    maxId=-1
+    part=None
+    scopeName=ascope['scope'] 
+    for aT in ascope['timeseries']:
+      if aT['id']>maxId:
+        maxId=aT['id']
+        part=aT['classes']
+    jrole={}
+    if part is not None:
+      jrole['scope']=scopeName
+      jrole['classes']=part
+      jroles.append(jrole)
+#    print(jroles)
+  with open('roles.json','w') as file:
+    json.dump(jroles,file,indent=2)
   return roles
 
 cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': [{'x'}], 'RG4': set()},

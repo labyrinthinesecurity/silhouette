@@ -33,7 +33,7 @@ Finally, Silhouette suggests per-cluster role definitions and role assignements 
 
 The silhouette metric calculates the distance of each cluster to the origin. The distance ranges from 0 (cluster has no rights at all) at the origin to 999 (cluster is Tenant admin). Mathematical metrics obey a strict hierarchy which allows to make accurate distance measurements between cluster permissions. 
 
-By measuring the golden source permissions of a cluster to the origin and its ground source permissions to the origin, the triangular inequality allows us to determine the distance between golden source and ground truth. This distance is precisely the deescalation effort.
+By measuring the golden source permissions of a cluster to the origin and its ground source permissions to the origin, the triangular inequality allows us to determine the distance between golden source and ground truth. This distance is precisely the de-escalation effort.
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
