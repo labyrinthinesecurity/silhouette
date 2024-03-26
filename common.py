@@ -1604,16 +1604,16 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
             if rg not in cosinecache:
               if re.match(RG_PATTERN0,rg):
                 cosinecache[rg]=0
-                #print(rg,"matches", RG_PATTERN0)
+                print(rg,"matches", RG_PATTERN0)
               elif re.match(RG_PATTERN1,rg):
                 cosinecache[rg]=1
-                #print(rg,"matches", RG_PATTERN1)
+                print(rg,"matches", RG_PATTERN1)
               elif re.match(RG_PATTERN2,rg):
                 cosinecache[rg]=2
-                #print(rg,"matches", RG_PATTERN2)
+                print(rg,"matches", RG_PATTERN2)
               elif re.match(RG_PATTERN3,rg):
                 cosinecache[rg]=3
-                #print(rg,"matches", RG_PATTERN3)
+                print(rg,"matches", RG_PATTERN3)
               else:
                 cosinecache[rg]=3
                 #print(rg,"matches no pattern, resorting to RG4")
