@@ -142,8 +142,8 @@ generate_condensate(run_partition,"7",strat='None',verbose=True,debug=False,merg
 Notice that the cluster ID is actually string "7", not number 7.
 
 condensate.py will generate two JSON files:
-- *clusterID-condensate.json* is a list of roles to be assigned to the cluster
-- *clusterID-feather.json* is reserved for future use
+- *ID-condensate.json* is a list of roles to be assigned to the cluster
+- *ID-feather.json* is reserved for future use
 
 During the process, ground truth (activity logs) will retrieved from your blob container cache. If they are not already there, they will be pulled from LAW and stored in the cache for future re-use.
 

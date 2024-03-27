@@ -1207,7 +1207,7 @@ authorizationresources
       permset.update(pset)
       combined+=cbr 
       if sc is not None and len(sc)>0:
-        print("(recursively analyzing AAD group)",sc)
+        print("(recursively analyzing AAD group)")
       super_classes.update(sc)
       super_res.update(sr)
       write_delete_classes.update(wc)
@@ -1319,7 +1319,7 @@ authorizationresources
   if group:
     print("(group)")
   if not verbose and not group:
-    print("storing")
+    #print("storing")
     store_row5(account,build_goldensource,build_partition,principalId,d,war,jbuf['Sresolution'],jbuf['Wresolution'],jbuf['Aresolution'],da,json.dumps(jbuf))
   return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,list(dactions),list(notdactions),token
 
@@ -1502,12 +1502,12 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
   if debug:
-    with open(f"{cluster}_ground_permissions.json","w") as cgp:
-      cgp.write("[")
-      cgp.write(json.dumps(axsdict,indent=2))
-      cgp.write(",\n")
-      cgp.write(json.dumps(sxadict,indent=2))
-      cgp.write("]\n")
+#    with open(f"{cluster}_ground_permissions.json","w") as cgp:
+#      cgp.write("[")
+#      cgp.write(json.dumps(axsdict,indent=2))
+#      cgp.write(",\n")
+#      cgp.write(json.dumps(sxadict,indent=2))
+#      cgp.write("]\n")
     print("Current silhouette= ",outerscore) 
     print("")
     print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
@@ -1604,16 +1604,16 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
             if rg not in cosinecache:
               if re.match(RG_PATTERN0,rg):
                 cosinecache[rg]=0
-                print(rg,"matches", RG_PATTERN0)
+                #print(rg,"matches", RG_PATTERN0)
               elif re.match(RG_PATTERN1,rg):
                 cosinecache[rg]=1
-                print(rg,"matches", RG_PATTERN1)
+                #print(rg,"matches", RG_PATTERN1)
               elif re.match(RG_PATTERN2,rg):
                 cosinecache[rg]=2
-                print(rg,"matches", RG_PATTERN2)
+                #print(rg,"matches", RG_PATTERN2)
               elif re.match(RG_PATTERN3,rg):
                 cosinecache[rg]=3
-                print(rg,"matches", RG_PATTERN3)
+                #print(rg,"matches", RG_PATTERN3)
               else:
                 cosinecache[rg]=3
                 #print(rg,"matches no pattern, resorting to RG4")
@@ -1652,32 +1652,27 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                       ard['Actions'][rgcat].add(ac)
             if len(ard['Actions']['RG0'])>0:
               ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
-#              ard['Actions']['RG0'].add('R::'+rg)
-              ard['Actions']['RG0'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG0'].add('R::'+ss+'/'+rg)
               #print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
               parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
             if len(ard['Actions']['RG1'])>0:
               ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
-#              ard['Actions']['RG1'].add('R::'+rg)
-              ard['Actions']['RG1'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG1'].add('R::'+ss+'/'+rg)
               #print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
               parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
             if len(ard['Actions']['RG2'])>0:
               ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
-#              ard['Actions']['RG2'].add('R::'+rg)
-              ard['Actions']['RG2'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG2'].add('R::'+ss+'/'+rg)
               #print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
               parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
             if len(ard['Actions']['RG3'])>0:
               ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
-#              ard['Actions']['RG3'].add('R::'+rg)
-              ard['Actions']['RG3'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG3'].add('R::'+ss+'/'+rg)
               #print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
               parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
             if len(ard['Actions']['RG4'])>0:
               ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
-#              ard['Actions']['RG4'].add('R::'+rg)
-              ard['Actions']['RG4'].add('S::'+ss+'/'+rg)
+              ard['Actions']['RG4'].add('R::'+ss+'/'+rg)
               #print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
               parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
       elif strategy[aw]=='SUB':
@@ -1801,9 +1796,9 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
             desired_sil[cl]=silhouette[cl+'_scaleddown'][str(resolution)]
     desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
     print("Desired silhouette=",desiredscore)
-    print("")
-    print("Cluster condensate:")
-    print(desired_roles)
+#    print("")
+#    print("Cluster condensate:")
+#    print(desired_roles)
   return counts,outerscore,desiredscore
 
 def ml_get_rows(account,table,PK):
@@ -1898,7 +1893,7 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
   #print('[',end='')
   zzz='['
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
-    zbuf='{"scope": "'+scope+'", "timeseries": ['
+    zbuf='{"name": "'+scope+'", "history": ['
     zbuf0=zbuf
     sol.push()
     dendroCache={}
@@ -1989,24 +1984,24 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     sol.pop()
   jrs=zzz[:-2]+']\n'
   jr=json.loads(jrs)
-  with open('timelines.json','w') as file:
+  with open(f"C{cluster}-feather.json",'w') as file:
     json.dump(jr,file,indent=2)
   jroles=[]
   for ascope in jr:
     maxId=-1
     part=None
-    scopeName=ascope['scope'] 
-    for aT in ascope['timeseries']:
+    scopeName=ascope['name'] 
+    for aT in ascope['history']:
       if aT['id']>maxId:
         maxId=aT['id']
         part=aT['classes']
     jrole={}
     if part is not None:
-      jrole['scope']=scopeName
-      jrole['classes']=part
+      jrole['name']=scopeName
+      jrole['actionsScopes']=part
       jroles.append(jrole)
 #    print(jroles)
-  with open('roles.json','w') as file:
+  with open(f"C{cluster}-condensate.json",'w') as file:
     json.dump(jroles,file,indent=2)
   return roles
 
