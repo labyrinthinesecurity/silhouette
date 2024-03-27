@@ -131,19 +131,21 @@ Create a container called with the name of your build_partition
 
 Now pick a cluster ID from the above mentioned CSV and stick it to the function called in condensate.py
 
+A *condensate* is a generic term to describe a list of RBAC roles to be assigned to all SPNs in the cluster.
+
 For example, if the cluster ID you want to condensate has cluster ID 7, you should set the function as follows:
 
 ```
-generate_condensate(run_partition,"7",verbose=True,debug=False)
+generate_condensate(run_partition,"7",strat='None',verbose=True,debug=False,merged=False)
 ```
 
 Notice that the cluster ID is actually string "7", not number 7.
 
-Run condensate.py to stdout a clusterwide enumeration of assigned roles (golden source) and actual permissions (ground truth). As explained above, logs will retrieved from your local container cache. If they are not already there, they will be pulled from LAW and stored in the cache for future re-use.
+condensate.py will generate two JSON files:
+- *clusterID-condensate.json* is a list of roles to be assigned to the cluster
+- *clusterID-feather.json* is reserved for future use
 
-condensate will help you reshape (or create) built-in role definitions, clusterwide. These clusterwide role definitions are dumped to stdout: they are called cluster condensates.
-
-If you set debug to True, generate_condensate.py will also dump a file called clustername_ground_permissions.json that will help you understand whih SPN in the cluster is producing which ground permission, and in which scope. In our example with cluster 7, the file generated is called 7_ground_permissions.json
+During the process, ground truth (activity logs) will retrieved from your blob container cache. If they are not already there, they will be pulled from LAW and stored in the cache for future re-use.
 
 ## Fine-tuning (clusterwide, not per SPN!)
 
@@ -163,7 +165,7 @@ For each cluster and for each part (W,A,R), you :
 
 A cluster grouping landing zone management SPNs might need W roles at the management group level, while a cluster grouping application managed identities might need W roles at the resource group level, A role at the subscription level, and R role at the management group level.
 
-The script investigate_cluter.py does this W/A/R fine-tuning layer for you, but it MUST be reviewed manually, because it is not 100% acurate.
+The script condensate.py does this W/A/R fine-tuning layer for you, but it MUST be reviewed manually, because it is not 100% acurate.
 
 ## A word on the reward...
 
