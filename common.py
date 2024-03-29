@@ -1608,7 +1608,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
               cosinecache[rg]=3
               #print(rg,"matches", RG_PATTERN3)
             else:
-              cosinecache[rg]=3
+              cosinecache[rg]=4
               #print(rg,"matches no pattern, resorting to RG4")
           rgcat='RG'+str(cosinecache[rg])
           #print("CAT",rgcat)
@@ -1616,6 +1616,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
           ard['Actions']['RG1']=set()
           ard['Actions']['RG2']=set()
           ard['Actions']['RG3']=set()
+          ard['Actions']['RG4']=set()
           for nm in sxadict[aw][ss][rg]:
             for an in sxadict[aw][ss][rg]:
               if an==nm:
