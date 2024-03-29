@@ -1215,6 +1215,7 @@ authorizationresources
       write_delete_providers.update(rrw)
       write_res.update(wr)
       action_classes.update(ac)
+      action_classes.update(dac)
       action_providers.update(rra)
       action_res.update(ar)
       read_classes.update(rc)
@@ -1241,10 +1242,13 @@ authorizationresources
 #    if len(aC['notdataactions'])>0:
 #      nda=str(resource)+':'+str(scope)+':'+aC['notdataactions']
 #      notdactions.add(nda)
+    else:
+      dal=[]
     if not scope:
       print("UNKNOWN SCOPE:",scope)
       sys.exit()
-    classes,rps,stars = partition_permissions(actions,resolution,permset)
+    total_actions=actions+dal
+    classes,rps,stars = partition_permissions(total_actions,resolution,permset)
     for astar in stars:
       if astar not in starRoles:
         starRoles[astar]=set([])
@@ -1463,12 +1467,6 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
     return
   if maxres>=6:
     print("WARNING. Some resources have direct role assignments. Currently, Silhouette only supports role assignments to resource containers (MGs,subscriptions,RGs). Resource role assignments must be added manually to role definitions")
-  if len(dactions)>0 or len(notdactions)>0:
-    print("WARNING. Some cluster members have data plane actions or notActions. They are not managed by Silhouette and must be added manually to cluster/SPN role definition.")
-    for aa in dactions:
-       print("  dataActions:",aa)
-#    for na in notdactions:
-#       print("  notDataActions:",na)
   if len(das)>0:
     print("WARNING: the following principals have IAM role definitions or role assignments. These are not currently supported by Silhouette and must be added manually to cluster custom roles:")
     for d in das:
@@ -1502,12 +1500,6 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
   if debug:
-#    with open(f"{cluster}_ground_permissions.json","w") as cgp:
-#      cgp.write("[")
-#      cgp.write(json.dumps(axsdict,indent=2))
-#      cgp.write(",\n")
-#      cgp.write(json.dumps(sxadict,indent=2))
-#      cgp.write("]\n")
     print("Current silhouette= ",outerscore) 
     print("")
     print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
