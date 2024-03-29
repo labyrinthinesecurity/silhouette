@@ -1112,7 +1112,7 @@ authorizationresources
         continue
       else:
         print(aP,"found in AAD")
-        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,token=fetch_assignments_by_id(aP,verbose=False,group=False,token=token)
+        pset,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,token=fetch_assignments_by_id(aP,verbose=False,group=False,token=token)
         #print(aP," WAR is",a1)
     else:
       print(aP,orpartition,"found in orphans => IGNORING")
@@ -1130,8 +1130,8 @@ authorizationresources
     | extend roleId = tostring(properties.roleDefinitionId)
     | join kind = inner (authorizationresources
     | where ['type'] has "roledefinitions"
-    | distinct tostring(properties.roleName), ['id'],tostring(properties.permissions[0].actions),tostring(properties.permissions[0].dataactions),tostring(properties.permissions[0].notdataactions)) on $left.roleId == $right.['id']
-    | extend combinedRole = pack('role',tostring(properties_roleName),'scope',tostring(properties.scope),'actions',properties_permissions_0_actions,'dataactions',properties_permissions_0_actions,'notdataactions',properties_permissions_0_notdataactions,'ra',['id'],'rd', tostring(roleId) )
+    | distinct tostring(properties.roleName), ['id'],tostring(properties.permissions[0].actions),tostring(properties.permissions[0].notactions),tostring(properties.permissions[0].dataactions),tostring(properties.permissions[0].notdataactions)) on $left.roleId == $right.['id']
+    | extend combinedRole = pack('role',tostring(properties_roleName),'scope',tostring(properties.scope),'actions',properties_permissions_0_actions,'notactions',properties_permissions_0_notactions,'dataactions',properties_permissions_0_dataactions,'notdataactions',properties_permissions_0_notdataactions,'ra',['id'],'rd', tostring(roleId) )
     | summarize make_set(combinedRole) by tostring(properties.principalType)
     | order by ['properties_principalType'] asc
 '''
@@ -1151,7 +1151,7 @@ authorizationresources
       print(principalId,"doesnt exist")
       orpartition=principalId[:2]
       store_row(account,orphans,orpartition,principalId,'')
-      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
+      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
   else:
     aR=results[0]
     code,token,display,exists,entity=entity_exists(principalId,aR['properties_principalType'],token=None)
@@ -1159,7 +1159,7 @@ authorizationresources
       print(principalId,aR['properties_principalType'],"doesnt exist")
       orpartition=principalId[:2]
       store_row(account,orphans,orpartition,principalId,'')
-      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
+      return None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,token
   combined=aR['set_combinedRole']
   if display:
     d=display
@@ -1185,6 +1185,7 @@ authorizationresources
   permset=set()
   dactions=set()
   notdactions=set()
+  notactions=set()
   if aR['properties_principalType'] in ['User','ServicePrincipal']:
     g0,token=get_groups_of(principalId,aR['properties_principalType'],token)
   if g0 and 'value' in g0:
@@ -1193,7 +1194,7 @@ authorizationresources
       groups.add(ag['id'])
     grcnt=0
     for gr in groups:
-      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,dac,notdac,token=fetch_assignments_by_id(gr,verbose=verbose,group=True,token=token)   
+      pset,cbr,war,da,sc,sr,wc,wr,ac,ar,rc,rr,dc,gc,rrw,rra,rrr,dac,token=fetch_assignments_by_id(gr,verbose=verbose,group=True,token=token)   
       if war is None:
         continue
       if "displayName" in ag:
@@ -1202,8 +1203,8 @@ authorizationresources
         gdn=''
       if dac:
         dactions.update(dac)
-      if notdac:
-        notdactions.update(notdac)
+#      if notdac:
+#        notdactions.update(notdac)
       permset.update(pset)
       combined+=cbr 
       if sc is not None and len(sc)>0:
@@ -1233,14 +1234,13 @@ authorizationresources
       dal=json.loads(aC['dataactions'])
       zdal=[]
       for ada in dal:
-#        if ada!="*":
         zdal.append(ada)
       if len(zdal)>0:
         da=str(resource)+':'+str(scope)+':'+str(zdal)
         dactions.add(da)
-    if len(aC['notdataactions'])>0:
-      nda=str(resource)+':'+str(scope)+':'+aC['notdataactions']
-      notdactions.add(nda)
+#    if len(aC['notdataactions'])>0:
+#      nda=str(resource)+':'+str(scope)+':'+aC['notdataactions']
+#      notdactions.add(nda)
     if not scope:
       print("UNKNOWN SCOPE:",scope)
       sys.exit()
@@ -1321,14 +1321,14 @@ authorizationresources
   if not verbose and not group:
     #print("storing")
     store_row5(account,build_goldensource,build_partition,principalId,d,war,jbuf['Sresolution'],jbuf['Wresolution'],jbuf['Aresolution'],da,json.dumps(jbuf))
-  return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,list(dactions),list(notdactions),token
+  return permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,list(dactions),token
 
 def investigate_principalId(pk,principalId,verbose):
-  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,notdactions,token=fetch_assignments_by_id(principalId,verbose=verbose,group=False,token=None)
+  golden_permset,combined,war,da,super_classes,super_res,write_delete_classes,write_res,action_classes,action_res,read_classes,read_res,define_classes,assign_classes,write_delete_providers,action_providers,read_providers,dactions,token=fetch_assignments_by_id(principalId,verbose=verbose,group=False,token=None)
   if war is None:
-    return None,None,None,None,None,None,None,None,None,None
+    return None,None,None,None,None,None,None,None,None
   ground_permset,isUsed,gsource,ground,axs,token=fetch_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
-  return golden_permset,ground_permset,axs,da,super_res,write_res,action_res,read_res,dactions,notdactions
+  return golden_permset,ground_permset,axs,da,super_res,write_res,action_res,read_res,dactions
 
 def build_silhouette(pk,render):
   import csv
@@ -1402,13 +1402,13 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
   for record in czc[scluster]:
     name,pid=record['Name'].split('(')
     pid=pid[:-1]
-    gop,grp,axs,da,sres,wres,ares,rres,dac,notdac=investigate_principalId(pk,pid,verbose)
+    gop,grp,axs,da,sres,wres,ares,rres,dac=investigate_principalId(pk,pid,verbose)
     if gop is None:
       continue
     if dac:
       dactions.update(dac)
-    if notdac:
-      notdactions.update(notdac)
+#    if notdac:
+#      notdactions.update(notdac)
     if sres and len(sres)>0:
       msr=max(sres)
     else:
@@ -1467,8 +1467,8 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
     print("WARNING. Some cluster members have data plane actions or notActions. They are not managed by Silhouette and must be added manually to cluster/SPN role definition.")
     for aa in dactions:
        print("  dataActions:",aa)
-    for na in notdactions:
-       print("  notDataActions:",na)
+#    for na in notdactions:
+#       print("  notDataActions:",na)
   if len(das)>0:
     print("WARNING: the following principals have IAM role definitions or role assignments. These are not currently supported by Silhouette and must be added manually to cluster custom roles:")
     for d in das:
@@ -1619,7 +1619,10 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                 #print(rg,"matches no pattern, resorting to RG4")
             rgcat='RG'+str(cosinecache[rg])
             #print("CAT",rgcat)
-            ard['Actions'][rgcat]=set()
+            ard['Actions']['RG0']=set()
+            ard['Actions']['RG1']=set()
+            ard['Actions']['RG2']=set()
+            ard['Actions']['RG3']=set()
             for nm in sxadict[aw][ss][rg]:
               for an in sxadict[aw][ss][rg]:
                 if an==nm:
@@ -1710,6 +1713,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                   break
           if len(ard['Actions']['SUB'])>0:
             ards[nm]['SUB'].append(sorted(list(ard['Actions']['SUB'])))
+            ard['Actions']['SUB'].add('S::'+ss)
             parent_sets[nm]['SUB'].append(ard['Actions']['SUB'])
       elif strategy[aw]=='MG':
         ard['Actions']['MG']=set()
@@ -1740,12 +1744,12 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
         if len(ard['Actions']['MG'])>0:
           ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
           parent_sets[nm]['MG'].append(ard['Actions']['MG'])
-    #print("parent sets")
-    #for aP in parent_sets:
-    #  print("  principal",aP,p2n[aP])
-    #  print("  ..",parent_sets[aP])
-    #print(" ")
-    desired_roles=reason_clusterwide(cluster,parent_sets,debug)
+#    print("parent sets")
+#    for aP in parent_sets:
+#      print("  principal",aP,p2n[aP])
+#      print("  ..",parent_sets[aP])
+#    print(" ")
+    desired_roles=reason_clusterwide(cluster,parent_sets)
     #print("REASONING")
     #print(desired_roles)
     #print("")
@@ -1877,7 +1881,7 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
-def reason_clusterwide(cluster,pset,dendrogram=False):
+def reason_clusterwide(cluster,pset):
   import csv
   sol=Solver()
   roles={
@@ -1889,8 +1893,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
     'RG3': [],
     'RG4': []
   }
-  #zzz=''
-  #print('[',end='')
   zzz='['
   for scope in [ 'MG', 'SUB', 'RG0','RG1','RG2','RG3','RG4']:
     zbuf='{"name": "'+scope+'", "history": ['
@@ -1928,8 +1930,8 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
               permRightHistory[str(dendroCounter)]=str(classRepresentative)
               permCache[str(z3perm)]=1
               leftCache[str(z3perm)]=1
-            if scope in ['RG0','RG1','RG2','RG3','RG4']:
-              if dendrogram:
+            if scope in ['MG','SUB','RG0','RG1','RG2','RG3','RG4']:
+              if True:
                 oldzlc=zlc
                 zlc={}
                 if sol.check()==sat:
@@ -2000,7 +2002,6 @@ def reason_clusterwide(cluster,pset,dendrogram=False):
       jrole['name']=scopeName
       jrole['actionsScopes']=part
       jroles.append(jrole)
-#    print(jroles)
   with open(f"C{cluster}-condensate.json",'w') as file:
     json.dump(jroles,file,indent=2)
   return roles
@@ -2012,7 +2013,7 @@ cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {
 
 NOPERM=addPerm('No perm')
 
-#desired_roles=reason_clusterwide("sample",cluster_sample,True)
+#desired_roles=reason_clusterwide("sample",cluster_sample)
 #print(desired_roles)
 #sys.exit()
 build_partition=new_partition()
