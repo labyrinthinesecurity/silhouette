@@ -1388,6 +1388,9 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
     strat={}
     desired_sil['write/delete']=0
     strat['W']=None
+    if d_s-700>=0:
+      print("ERROR. Superadmin desired_silhouettes are not supported by condensates. Please consider lower Write perms for this cluster")
+      sys.exit(1)
     if d_s-950>=0:
       desired_sil['write/delete']=950
       d_s-=950
@@ -1432,10 +1435,14 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       desired_sil['write/delete']=200
       d_s-=200
       strat['W']='RG'
+      print("ERROR. Resource-level Write permissions are not supported by condensates. Consider adding them manually")
+      sys.exit(1)
     elif d_s-100>=0:
       desired_sil['write/delete']=100   
       d_s-=100
       strat['W']='RG'
+      print("ERROR. Subresource-level Write permissions are not supported by condensates. Consider adding them manually")
+      sys.exit(1)
     desired_sil['action']=0
     strat['A']=None
     if d_s-45>=0:
@@ -1458,10 +1465,14 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       desired_sil['action']=20   
       d_s-=20
       strat['A']='RG'
+      print("ERROR. Resource-level Action permissions are not supported by condensates. Consider adding them manually")
+      sys.exit(1)
     elif d_s-10>=0:
       desired_sil['action']=10   
       d_s-=10
       strat['A']='RG'
+      print("ERROR. Subresource-level Action permissions are not supported by condensates. Consider adding them manually")
+      sys.exit(1)
     desired_sil['read']=0
     strat['R']=None
     if d_s-4>=0:
@@ -1480,6 +1491,8 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       desired_sil['read']=1
       d_s-=1
       strat['R']='RG'
+      print("ERROR. Resource and subresource level Read permissions are not supported by condensates. Consider adding them manually")
+      sys.exit(1)
   elif d_s<=0:
     d_s=None   
   if d_s is None:
@@ -1650,6 +1663,7 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
         rgcnt=len(axsdict[nm][aw][ss])
         if rgcnt>maxRGs[aw]:
           maxRGs[aw]=rgcnt
+    # Now setting default desired_silhouette in case it is None
     if strat is None:
       for aw in ['W','A','R']:
         if maxSubs[aw]>=20:
@@ -1668,7 +1682,6 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
 #    print("STRATEGY",strategy)
     if strategy['W'] is None and strategy['A'] is None:
       return 0,0,0
-#    print("max Subs:",maxSubs,"max RGs:",maxRGs)
   ard={}
   ard['Actions']={
               'RG0': set(),

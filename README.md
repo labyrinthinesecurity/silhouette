@@ -37,6 +37,10 @@ By measuring the golden source permissions of a cluster to the origin and its gr
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/hier.PNG" width="50%">
 
+## Table of silhouette distances
+
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/main/WARnormTable.PNG" width="50%">
+
 ## Pre-requisites
 - Python 3.6 or later
 - An Azure Table to store Azure silhouette data
@@ -146,15 +150,22 @@ generate_condensate(run_partition,"7",desired_silhouette='None',verbose=True,deb
 
 Notice that the cluster ID is actually string "7", not number 7.
 
-### The desired_silhouette parameter
+## The desired_silhouette parameter
 
 When desired_silhouette is None, condensate.py uses the default desired_silhouette which is the same as minimize.py
 
-You may set desired_sihouette to any WAR norm value that meets your requirements for a cluster ID. For example, you may set desired_silhouette to 332 which means that 'W', 'A' and 'R' permissions are set on resource group scopes:
+You may set desired_sihouette to any WAR norm value that meets your requirements for a cluster ID, within allowed ranges. For example, you may set desired_silhouette to 332 which means that 'W', 'A' and 'R' permissions are set on resource group scopes:
 
 ```
-generate_condensate(run_partition,"7",desired_silhouette=332',verbose=True,debug=False,merged=False)
+generate_condensate(run_partition,"7",desired_silhouette=332,verbose=True,debug=False,merged=False)
 ```
+
+### Allowed ranges
+
+generate_condensate supports the following ranges for Write, Action and Read permissions:
+- For Write permissions: non-superadmin (so 600 or below), above or equal to resource group (so 300 or higher)
+- For Action permissions: above or equal to resource group (so 30 or higher)
+- For Read permissions: above or equal to resource group (so 2 or higher)
 
 ### Output
 condensate.py will generate these same couple of JSON files as before, but fine-tuned by the desired_silhouette parameter:
