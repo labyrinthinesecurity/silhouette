@@ -1360,7 +1360,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def generate_condensate(pk,cluster,strat,verbose,debug,merged):
+def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1383,7 +1383,109 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
           'unknown': 0,
           'read':0
           }
-
+  d_s=desired_silhouette
+  if d_s is not None and d_s>0:
+    strat={}
+    desired_sil['write/delete']=0
+    strat['W']=None
+    if d_s-950>=0:
+      desired_sil['write/delete']=950
+      d_s-=950
+      strat['W']='MG'
+    elif d_s-900>=0:
+      desired_sil['write/delete']=900
+      d_s-=900
+      strat['W']='MG'
+    elif d_s-850>=0:
+      desired_sil['write/delete']=850
+      d_s-=850
+      strat['W']='SUB'
+    elif d_s-800>=0:
+      desired_sil['write/delete']=800
+      d_s-=800
+      strat['W']='RG'
+    elif d_s-750>=0:
+      desired_sil['write/delete']=750
+      d_s-=750
+      strat['W']='RG'
+    elif d_s-700>=0:
+      desired_sil['write/delete']=700
+      d_s-=700
+      strat['W']='RG'
+    elif d_s-600>=0:
+      desired_sil['write/delete']=600
+      d_s-=600
+      strat['W']='MG'
+    elif d_s-500>=0:
+      desired_sil['write/delete']=500
+      d_s-=500
+      strat['W']='MG'
+    elif d_s-400>=0:
+      desired_sil['write/delete']=400   
+      d_s-=400
+      strat['W']='SUB'
+    elif d_s-300>=0:
+      desired_sil['write/delete']=300
+      d_s-=300
+      strat['W']='RG'
+    elif d_s-200>=0:
+      desired_sil['write/delete']=200
+      d_s-=200
+      strat['W']='RG'
+    elif d_s-100>=0:
+      desired_sil['write/delete']=100   
+      d_s-=100
+      strat['W']='RG'
+    desired_sil['action']=0
+    strat['A']=None
+    if d_s-45>=0:
+      desired_sil['action']=45
+      d_s-=45
+      strat['A']='MG'
+    elif d_s-40>=0:
+      desired_sil['action']=40   
+      d_s-=40
+      strat['A']='MG'
+    elif d_s-35>=0:
+      desired_sil['action']=35
+      d_s-=35
+      strat['A']='SUB'
+    elif d_s-30>=0:
+      desired_sil['action']=30   
+      d_s-=30
+      strat['A']='RG'
+    elif d_s-20>=0:
+      desired_sil['action']=20   
+      d_s-=20
+      strat['A']='RG'
+    elif d_s-10>=0:
+      desired_sil['action']=10   
+      d_s-=10
+      strat['A']='RG'
+    desired_sil['read']=0
+    strat['R']=None
+    if d_s-4>=0:
+      desired_sil['read']=4
+      d_s-=4
+      strat['R']='MG'
+    elif d_s-3>=0:
+      desired_sil['read']=3
+      d_s-=3
+      strat['R']='SUB'
+    elif d_s-2>=0:
+      desired_sil['read']=2
+      d_s-=2
+      strat['R']='RG'
+    elif d_s-1>=0:
+      desired_sil['read']=1
+      d_s-=1
+      strat['R']='RG'
+  elif d_s<=0:
+    d_s=None   
+  if d_s is None:
+    strat=None
+  strat['R']=None
+  print("*** STRAT",d_s,strat)
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
   ground_counts={}
@@ -1466,7 +1568,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
   if cntid==0:  # empty cluster... weird!
     return
   if maxres>=6:
-    print("WARNING. Some resources have direct role assignments. Currently, Silhouette only supports role assignments to resource containers (MGs,subscriptions,RGs). Resource role assignments must be added manually to role definitions")
+    print("WARNING. Some resources have direct, resource-level role assignments. Currently, Silhouette only supports role assignments to resource containers (MGs,subscriptions,RGs). Resource role assignments must be added manually to role definitions")
   if len(das)>0:
     print("WARNING: the following principals have IAM role definitions or role assignments. These are not currently supported by Silhouette and must be added manually to cluster custom roles:")
     for d in das:
@@ -1548,23 +1650,22 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
         rgcnt=len(axsdict[nm][aw][ss])
         if rgcnt>maxRGs[aw]:
           maxRGs[aw]=rgcnt
-    for aw in ['W','A','R']:
-      if maxSubs[aw]>=20:
-        strategy[aw]='MG'
-      else:
-        if maxRGs[aw]==1:
-         strategy[aw]='SUB'
-        elif maxRGs[aw]>1:
-         strategy[aw]='RG'
+    if strat is None:
+      for aw in ['W','A','R']:
+        if maxSubs[aw]>=20:
+          strategy[aw]='MG'
         else:
-         strategy[aw]=None
-      if strategy[aw] is not None:
-        if strat is None:
-#           strategy[aw]='RG'
-          pass
-        else:
-          strategy[aw]=strat
-    print("STRATEGY",strategy)
+          if maxRGs[aw]==1:
+           strategy[aw]='SUB'
+          elif maxRGs[aw]>1:
+           strategy[aw]='RG'
+          else:
+           strategy[aw]=None
+        if strategy[aw] is None:
+          strategy[aw]=strat[aw]
+    else:
+      strategy=strat
+#    print("STRATEGY",strategy)
     if strategy['W'] is None and strategy['A'] is None:
       return 0,0,0
 #    print("max Subs:",maxSubs,"max RGs:",maxRGs)
@@ -1588,7 +1689,7 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
               'MG': set()
     }
   for aw in ['W','A','R']:
-    if strategy[aw] is None:
+    if strategy[aw] is None or aw not in sxadict:
       continue
     if strategy[aw]=='RG':
       for ss in sxadict[aw]: 
@@ -1623,11 +1724,11 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                 #print('reviewing',aw,ss,rg,an)
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
-                  if aw=='R' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                  if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     #print("  case R absorbed by A: rg",rg,"cat",rgcat,"absorbed",ac)
                     pass
                   # Local R and A actions are absorbed by local W actions
-                  elif aw!='W' and strategy['W'] is not None and strategy['W']=='RG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
+                  elif aw!='W' and strategy['W'] is not None and 'W' in sxadict and strategy['W']=='RG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
                     #print("  case R+A absorbed by W: rg",rg,"cat",rgcat,"absorbed",ac)
                     pass
                   else:
@@ -1638,12 +1739,12 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
                       # remaining A and W actions are not local. We ignore them (they will be handled by their SUB or MG strategy).
 #                      pass
                 # Local W absorbs local A actions (so RG actions)
-                if aw=='W' and strategy['A'] is not None and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                if aw=='W' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                   for ac in sxadict['A'][ss][rg][an]:
                     #print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
                     ard['Actions'][rgcat].add(ac)
                 # Local W and local A absorb local R actions
-                if aw!='R' and strategy['R'] is not None and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
+                if aw!='R' and strategy['R'] is not None and 'R' in sxadict and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                   for ac in sxadict['R'][ss][rg][an]:
                     #print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
                     ard['Actions'][rgcat].add(ac)
@@ -1681,23 +1782,23 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
               if an==nm:
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
-                  if aw=='R' and strategy['A'] is not None and strategy['A']=='SUB' and ss in sxadict['A']:
+                  if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='SUB' and ss in sxadict['A']:
                     pass
                   # Local R and A actions are absorbed by local W actions
-                  elif aw!='W' and strategy['W'] is not None and strategy['W']=='SUB' and ss in sxadict['W']:
+                  elif aw!='W' and strategy['W'] is not None and 'W' in sxadict and strategy['W']=='SUB' and ss in sxadict['W']:
                     pass
                   else:
                     # Local W actions cannot be absorbed. We add them.
                     ard['Actions']['SUB'].add(ac)
                 # Local W absorbs local A actions and below (so SUB and RG)
-                if aw=='W' and strategy['A'] is not None and  ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])):
+                if aw=='W' and strategy['A'] is not None and 'A' in sxadict and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])):
                   for rg1 in sxadict['A'][ss]:
                     for an1 in sxadict['A'][ss][rg1]:
                       if an1==nm:
                         for ac in sxadict['A'][ss][rg1][an1]:
                           ard['Actions']['SUB'].add(ac)
                 # Local W and local A absorb local R actions (so SUB and RG)
-                if aw!='R' and strategy['R'] is not None and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg] and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])):
+                if aw!='R' and strategy['R'] is not None and 'R' in sxadict and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg] and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])):
                   for rg1 in sxadict['R'][ss]:
                     for an1 in sxadict['R'][ss][rg1]:
                       if an1==nm:
@@ -1718,20 +1819,20 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
               if an==nm:
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
-                  if aw=='R' and strategy['A'] is not None and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                  if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     pass
                   # Local R and A actions are absorbed by local W actions
-                  elif aw!='W' and strategy['W'] is not None and strategy['W']=='MG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
+                  elif aw!='W' and strategy['W'] is not None and 'W' in sxadict and strategy['W']=='MG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
                     pass
                   else:
                     # Local W actions cannot be absorbed. We add them.
                     ard['Actions']['MG'].add(ac)
                 # Local W absorbs local A actions and below (so MG, SUB and RG)
-                if aw=='W' and strategy['A'] is not None and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
+                if aw=='W' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                   for ac in sxadict['A'][ss][rg][an]:
                     ard['Actions']['MG'].add(ac)
                 # Local W and local A absorb local R actions (so MG, SUB and RG)
-                if aw!='R' and strategy['R'] is not None and strategy['R']=='MG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
+                if aw!='R' and strategy['R'] is not None and 'R' in sxadict and strategy['R']=='MG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                   for ac in sxadict['R'][ss][rg][an]:
                     ard['Actions']['MG'].add(ac)
                 break
@@ -1792,12 +1893,12 @@ def generate_condensate(pk,cluster,strat,verbose,debug,merged):
       if cl=='action' or cl=='read':
         if silhouette[cl+'_scaleddown'][str(resolution)]>desired_sil[cl]:
           desired_sil[cl]=silhouette[cl+'_scaleddown'][str(resolution)]
-  desiredscore=desired_sil['write/delete']+desired_sil['action']+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
-  print("Desired silhouette=",desiredscore)
+  #desiredscore=min(desired_sil['write/delete'],outer_sil['write/delete'])+min(desired_sil['action'],outer_sil['action'])+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
+  print("Desired silhouette=",desired_silhouette)
 #  print("")
 #  print("Cluster condensate:")
 #  print(desired_roles)
-  return counts,outerscore,desiredscore
+  return counts,outerscore,desired_silhouette
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
