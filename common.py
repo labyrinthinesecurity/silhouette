@@ -1351,7 +1351,8 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=generate_condensate(pk,str(cl),None,True,False,False)
+      c,o,d=generate_condensate(pk,str(cl),None,True,True,False)
+      print("COD",c,o,d)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1360,7 +1361,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
+def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1493,11 +1494,10 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       strat['R']='RG'
       print("ERROR. Resource and subresource level Read permissions are not supported by condensates. Consider adding them manually")
       sys.exit(1)
-  elif d_s<=0:
+  elif d_s is not None and d_s<=0:
     d_s=None   
   if d_s is None:
     strat=None
-  strat['R']=None
   print("*** STRAT",d_s,strat)
   # to be run after ml-ingest.py and ml.py
   golden_counts={}
@@ -1579,7 +1579,8 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       else:
         ground_counts[g]+=1
   if cntid==0:  # empty cluster... weird!
-    return
+    print("WARNING. Empty cluster",cluster)
+    return 0,0,0
   if maxres>=6:
     print("WARNING. Some resources have direct, resource-level role assignments. Currently, Silhouette only supports role assignments to resource containers (MGs,subscriptions,RGs). Resource role assignments must be added manually to role definitions")
   if len(das)>0:
@@ -1614,10 +1615,9 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
         if silhouette[cl][str(res)]>outer_sil[cl]:
           outer_sil[cl]=silhouette[cl][str(res)]
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
-  if debug:
-    print("Current silhouette= ",outerscore) 
-    print("")
-    print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
+  print("Current silhouette= ",outerscore) 
+  print("")
+  print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
   for g in ground_counts:
     cl,res,pr=g.split(':')
     if verbose:
@@ -1675,12 +1675,13 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
            strategy[aw]='RG'
           else:
            strategy[aw]=None
-        if strategy[aw] is None:
-          strategy[aw]=strat[aw]
+#        if strategy[aw] is None:
+#          strategy[aw]=strat[aw]
     else:
       strategy=strat
-#    print("STRATEGY",strategy)
+    print("STRATEGY",strategy)
     if strategy['W'] is None and strategy['A'] is None:
+      print("WARNING. No strategy for cluster",scluster)
       return 0,0,0
   ard={}
   ard['Actions']={
@@ -1857,7 +1858,7 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
 #    print("  principal",aP,p2n[aP])
 #    print("  ..",parent_sets[aP])
 #  print(" ")
-  desired_roles=reason_clusterwide(cluster,parent_sets)
+  desired_roles=reason_clusterwide(cluster,parent_sets,True)
   #print("REASONING")
   #print(desired_roles)
   #print("")
@@ -1906,12 +1907,15 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,debug,merged):
       if cl=='action' or cl=='read':
         if silhouette[cl+'_scaleddown'][str(resolution)]>desired_sil[cl]:
           desired_sil[cl]=silhouette[cl+'_scaleddown'][str(resolution)]
-  #desiredscore=min(desired_sil['write/delete'],outer_sil['write/delete'])+min(desired_sil['action'],outer_sil['action'])+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
-  print("Desired silhouette=",desired_silhouette)
+  if d_s is None:
+    desiredscore=min(desired_sil['write/delete'],outer_sil['write/delete'])+min(desired_sil['action'],outer_sil['action'])+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
+  else:
+    desiredscore=d_s
+  print("Desired silhouette=",desiredscore)
 #  print("")
 #  print("Cluster condensate:")
 #  print(desired_roles)
-  return counts,outerscore,desired_silhouette
+  return counts,outerscore,desiredscore
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
@@ -1989,7 +1993,7 @@ def ml_ingest():
   print("")
   print(f"CSV file '{run_partition}_{dstamp}.csv' created with {len(headers)} columns.")
 
-def reason_clusterwide(cluster,pset):
+def reason_clusterwide(cluster,pset,batch):
   import csv
   sol=Solver()
   roles={
@@ -2039,20 +2043,30 @@ def reason_clusterwide(cluster,pset):
               permCache[str(z3perm)]=1
               leftCache[str(z3perm)]=1
             if scope in ['MG','SUB','RG0','RG1','RG2','RG3','RG4']:
-              if True:
+              if batch==False:
                 oldzlc=zlc
                 zlc={}
                 if sol.check()==sat:
                   mdl=sol.model()
+                  sortedmodel=[]
                   for item in mdl:
+                    aI={}
+                    aI[str(item)]=int(str(mdl[item]).split('val!')[1])
+                    if '::' in str(item):
+                      sortedmodel.insert(0,aI) 
+                    else:
+                      sortedmodel.append(aI)
+                  for item in sortedmodel:
                     if True:
-                      foo=str(mdl[item]).split('val!')
-                      equivClass=int(foo[1])
-                      sec=str(foo[1])
-                      if sec not in zlc and str(item)!='No perm':
+#                      foo=str(mdl[item]).split('val!')
+#                      equivClass=int(foo[1])
+#                      sec=str(foo[1])
+                      sec=str(list(item.values())[0])
+#                      if sec not in zlc and str(item)!='No perm':
+                      if sec not in zlc and list(item.keys())[0]!='No perm':
                         zlc[sec]=set()
-                      if str(item)!='No perm':
-                        zlc[sec].add(str(item))
+                      if list(item.keys())[0]!='No perm':
+                        zlc[sec].add(list(item.keys())[0])
                   zh=hash(str(zlc))
                   if zh!=prvh:# and scope=='RG2':
                     if len(zlc)>oldlen:
@@ -2092,26 +2106,27 @@ def reason_clusterwide(cluster,pset):
     else:
       print("reason clusterwide: UNSAT")
     sol.pop()
-  jrs=zzz[:-2]+']\n'
-  jr=json.loads(jrs)
-  with open(f"C{cluster}-feather.json",'w') as file:
-    json.dump(jr,file,indent=2)
-  jroles=[]
-  for ascope in jr:
-    maxId=-1
-    part=None
-    scopeName=ascope['name'] 
-    for aT in ascope['history']:
-      if aT['id']>maxId:
-        maxId=aT['id']
-        part=aT['classes']
-    jrole={}
-    if part is not None:
-      jrole['name']=scopeName
-      jrole['actionsScopes']=part
-      jroles.append(jrole)
-  with open(f"C{cluster}-condensate.json",'w') as file:
-    json.dump(jroles,file,indent=2)
+  if batch==False:
+    jrs=zzz[:-2]+']\n'
+    jr=json.loads(jrs)
+    with open(f"C{cluster}-feather.json",'w') as file:
+      json.dump(jr,file,indent=2)
+    jroles=[]
+    for ascope in jr:
+      maxId=-1
+      part=None
+      scopeName=ascope['name'] 
+      for aT in ascope['history']:
+        if aT['id']>maxId:
+          maxId=aT['id']
+          part=aT['classes']
+      jrole={}
+      if part is not None:
+        jrole['name']=scopeName
+        jrole['actionsScopes']=part
+        jroles.append(jrole)
+    with open(f"C{cluster}-condensate.json",'w') as file:
+      json.dump(jroles,file,indent=2)
   return roles
 
 cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {'h'}], 'RG1': set(), 'RG2': set(), 'RG3': [{'x'}], 'RG4': set()},
@@ -2121,7 +2136,7 @@ cluster_sample= { "p1": {'MG': set(), 'SUB': set(), 'RG0': [{'a'}, {'b', 'c'}, {
 
 NOPERM=addPerm('No perm')
 
-#desired_roles=reason_clusterwide("sample",cluster_sample)
+#desired_roles=reason_clusterwide("sample",cluster_sample,False)
 #print(desired_roles)
 #sys.exit()
 build_partition=new_partition()
