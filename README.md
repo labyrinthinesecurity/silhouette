@@ -138,12 +138,11 @@ A *condensate* is a generic term to describe a list of RBAC roles to be assigned
 For example, if the cluster ID you want to condensate has cluster ID 7, you should set the function as follows:
 
 ```
-generate_condensate(run_partition,"7",desired_silhouette='None',verbose=True,batch=False,merged=False)
+generate_condensate(run_partition,"7",desired_silhouette='None')
 ```
 
 Notice that:
 - the cluster ID is actually string "7", not number 7
-- verbose, batch and merged shouldn't be modified
 - run_partition is automatically retrieved from the environment variable, as explained above
 
 ### The desired_silhouette parameter
@@ -159,7 +158,7 @@ You may set desired_sihouette to any WAR norm value that meets your requirements
 
 
 ```
-generate_condensate(run_partition,"7",desired_silhouette=434,verbose=True,debug=False,merged=False)
+generate_condensate(run_partition,"7",desired_silhouette=434)
 ```
 
 ### Allowed ranges

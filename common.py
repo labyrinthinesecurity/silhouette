@@ -1334,7 +1334,7 @@ def investigate_principalId(pk,principalId,verbose):
   ground_permset,isUsed,gsource,ground,axs,token=fetch_ground_truth(wid,principalId,"",timeBack,timeNow,token=None,verbose=verbose)
   return golden_permset,ground_permset,axs,da,super_res,write_res,action_res,read_res,dactions
 
-def build_silhouette(pk,render):
+def build_silhouette(pk):
   import csv
   with open(f"clusters_{pk}.json",'r') as cz:
     czc=json.load(cz)
@@ -1351,8 +1351,7 @@ def build_silhouette(pk,render):
     writer.writeheader()
     for cl in czc:
       print(f"reviewing cluster {cl}/{cls}...")
-      c,o,d=generate_condensate(pk,str(cl),None,True,True,False)
-      print("COD",c,o,d)
+      c,o,d=generate_condensate_with_options(pk,str(cl),None,False,True,False)
       row={'Cluster ID': 'CLUSTER'+str(cl), 'SPN counts': c, 'Current silhouette': o, 'Desired silhouette': d, 'Effort': o-d}
       writer.writerow(row)
       buf+=str(cl)+';'+str(c)+';'+str(o)+';'+str(d)+';'+str(o-d)+'\n' 
@@ -1361,7 +1360,7 @@ def build_silhouette(pk,render):
     ff.write(buf)
     ff.write(post)
 
-def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
+def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch,merged):
   global cosinecache
   outer_sil={
           'write/delete': 0,
@@ -1617,7 +1616,8 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
   outerscore=outer_sil['write/delete']+outer_sil['action']+outer_sil['read']
   print("Current silhouette= ",outerscore) 
   print("")
-  print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
+  if verbose:
+    print("Ground permissions from Azure activity logs, excluding read actions and data actions (ground truth):")
   for g in ground_counts:
     cl,res,pr=g.split(':')
     if verbose:
@@ -1675,11 +1675,9 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
            strategy[aw]='RG'
           else:
            strategy[aw]=None
-#        if strategy[aw] is None:
-#          strategy[aw]=strat[aw]
     else:
       strategy=strat
-    print("STRATEGY",strategy)
+#    print("STRATEGY",strategy)
     if strategy['W'] is None and strategy['A'] is None:
       print("WARNING. No strategy for cluster",scluster)
       return 0,0,0
@@ -1726,7 +1724,6 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
               cosinecache[rg]=4
               #print(rg,"matches no pattern, resorting to RG4")
           rgcat='RG'+str(cosinecache[rg])
-          #print("CAT",rgcat)
           ard['Actions']['RG0']=set()
           ard['Actions']['RG1']=set()
           ard['Actions']['RG2']=set()
@@ -1912,10 +1909,10 @@ def generate_condensate(pk,cluster,desired_silhouette,verbose,batch,merged):
   else:
     desiredscore=d_s
   print("Desired silhouette=",desiredscore)
-#  print("")
-#  print("Cluster condensate:")
-#  print(desired_roles)
   return counts,outerscore,desiredscore
+
+def generate_condensate(pk,cluster,desired_silhouette):
+  generate_condensate_with_options(pk,cluster,desired_silhouette,False,False,False)
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
