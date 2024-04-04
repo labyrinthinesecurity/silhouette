@@ -1904,15 +1904,16 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
       if cl=='action' or cl=='read':
         if silhouette[cl+'_scaleddown'][str(resolution)]>desired_sil[cl]:
           desired_sil[cl]=silhouette[cl+'_scaleddown'][str(resolution)]
-  if d_s is None:
+  if desired_silhouette is None:
     desiredscore=min(desired_sil['write/delete'],outer_sil['write/delete'])+min(desired_sil['action'],outer_sil['action'])+outer_sil['read']  # FOR NOW, because Azure Activity Logs dont capture reads, desired_sil['read'] is set to outer_sil['read']
   else:
-    desiredscore=d_s
+    desiredscore=desired_silhouette
   print("Desired silhouette=",desiredscore)
   return counts,outerscore,desiredscore
 
 def generate_condensate(pk,cluster,desired_silhouette):
-  return generate_condensate_with_options(pk,cluster,desired_silhouette,False,False,False)
+  c,o,d=generate_condensate_with_options(pk,cluster,desired_silhouette,False,False,False)
+  return c,o,d
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
