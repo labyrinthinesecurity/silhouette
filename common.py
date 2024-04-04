@@ -1912,7 +1912,7 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
   return counts,outerscore,desiredscore
 
 def generate_condensate(pk,cluster,desired_silhouette):
-  generate_condensate_with_options(pk,cluster,desired_silhouette,False,False,False)
+  return generate_condensate_with_options(pk,cluster,desired_silhouette,False,False,False)
 
 def ml_get_rows(account,table,PK):
   SAS=os.getenv(f"{account}_sas")
