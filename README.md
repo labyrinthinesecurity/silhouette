@@ -163,10 +163,10 @@ generate_condensate(run_partition,"7",desired_silhouette=434)
 
 ### Allowed ranges
 
-desired_cilhouette supports the following ranges for Write, Action and Read permissions:
-- For Write permissions: non-superadmin (so 600 or below), above or equal to resource group (so 300 or higher)
-- For Action permissions: above or equal to resource group (so 30 or higher)
-- For Read permissions: above or equal to resource group (so 2 or higher)
+Currently, desired_silhouette supports the following ranges for Write, Action and Read permissions:
+- For Write permissions: non-superadmin and below management group (so 400 or less), above or equal to resource group (so 300 or more)
+- For Action permissions: below management group (so 35 or less) above or equal to resource group (so 30 or more)
+- For Read permissions: below management group (so 3 or less) above or equal to resource group (so 2 or more)
 
 ### Minimized roles
 condensate.py will generate a couple of JSON files fine-tuned by the desired_silhouette parameter:
@@ -175,7 +175,7 @@ condensate.py will generate a couple of JSON files fine-tuned by the desired_sil
 
 ### Recommendations
 
-Ground truth permissions retrieved from Azure Activity always operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group, subscription, or, whenever possible, resource group level.
+Ground truth permissions retrieved from Azure Activity always operate at the ressource or subresource level. This grain is often too fine to allow a scalable scoping of role defitinions. You want to scope roles at management group (this level is not currently supported), subscription, or, whenever possible, resource group level.
 
 If you are ready to customize cluster roles, you should first try to set desired_silhouette to resource group level at most (desired_silhouette=332) 
 If this the resulting condensate generates too many roles, try to set one of W, A or R to subscription level

@@ -1391,6 +1391,9 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
     if d_s-700>=0:
       print("ERROR. Superadmin desired_silhouettes are not supported by condensates. Please consider lower Write perms for this cluster")
       sys.exit(1)
+    if d_s-500>=0:
+      print("ERROR. For now, management groups are not supported by condensates. Please consider reasoning at subscriptions level for this cluster")
+      sys.exit(1)
     if d_s-950>=0:
       desired_sil['write/delete']=950
       d_s-=950
@@ -1445,6 +1448,9 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
       sys.exit(1)
     desired_sil['action']=0
     strat['A']=None
+    if d_s-40>=0:
+      print("ERROR. For now, management groups are not supported by condensates. Please consider reasoning at subscriptions level for this cluster")
+      sys.exit(1)
     if d_s-45>=0:
       desired_sil['action']=45
       d_s-=45
@@ -1475,6 +1481,9 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
       sys.exit(1)
     desired_sil['read']=0
     strat['R']=None
+    if d_s-4>=0:
+      print("ERROR. For now, management groups are not supported by condensates. Please consider reasoning at subscriptions level for this cluster")
+      sys.exit(1)
     if d_s-4>=0:
       desired_sil['read']=4
       d_s-=4
@@ -1729,9 +1738,9 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
           ard['Actions']['RG2']=set()
           ard['Actions']['RG3']=set()
           ard['Actions']['RG4']=set()
-          for nm in sxadict[aw][ss][rg]:
+          if True:
             for an in sxadict[aw][ss][rg]:
-              if an==nm:
+              if True:
                 #print('reviewing',aw,ss,rg,an)
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
@@ -1759,38 +1768,38 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                   for ac in sxadict['R'][ss][rg][an]:
                     #print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
                     ard['Actions'][rgcat].add(ac)
-          if len(ard['Actions']['RG0'])>0:
-            ards[nm]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
-            ard['Actions']['RG0'].add('R::'+ss+'/'+rg)
-            #print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
-            parent_sets[nm]['RG0'].append(ard['Actions']['RG0'])
-          if len(ard['Actions']['RG1'])>0:
-            ards[nm]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
-            ard['Actions']['RG1'].add('R::'+ss+'/'+rg)
-            #print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
-            parent_sets[nm]['RG1'].append(ard['Actions']['RG1'])
-          if len(ard['Actions']['RG2'])>0:
-            ards[nm]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
-            ard['Actions']['RG2'].add('R::'+ss+'/'+rg)
-            #print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
-            parent_sets[nm]['RG2'].append(ard['Actions']['RG2'])
-          if len(ard['Actions']['RG3'])>0:
-            ards[nm]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
-            ard['Actions']['RG3'].add('R::'+ss+'/'+rg)
-            #print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
-            parent_sets[nm]['RG3'].append(ard['Actions']['RG3'])
-          if len(ard['Actions']['RG4'])>0:
-            ards[nm]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
-            ard['Actions']['RG4'].add('R::'+ss+'/'+rg)
-            #print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
-            parent_sets[nm]['RG4'].append(ard['Actions']['RG4'])
+            if len(ard['Actions']['RG0'])>0:
+              ards[an]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
+              ard['Actions']['RG0'].add('R::'+ss+'/'+rg)
+              #print("Parent set addition for rg0",rg,ard['Actions']['RG0'])
+              parent_sets[an]['RG0'].append(ard['Actions']['RG0'])
+            if len(ard['Actions']['RG1'])>0:
+              ards[an]['RG1'].append(sorted(list(ard['Actions']['RG1'])))
+              ard['Actions']['RG1'].add('R::'+ss+'/'+rg)
+              #print("Parent set addition for rg1",rg,ard['Actions']['RG1'])
+              parent_sets[an]['RG1'].append(ard['Actions']['RG1'])
+            if len(ard['Actions']['RG2'])>0:
+              ards[an]['RG2'].append(sorted(list(ard['Actions']['RG2'])))
+              ard['Actions']['RG2'].add('R::'+ss+'/'+rg)
+              #print("Parent set addition for rg2",rg,ard['Actions']['RG2'])
+              parent_sets[an]['RG2'].append(ard['Actions']['RG2'])
+            if len(ard['Actions']['RG3'])>0:
+              ards[an]['RG3'].append(sorted(list(ard['Actions']['RG3'])))
+              ard['Actions']['RG3'].add('R::'+ss+'/'+rg)
+              #print("Parent set addition for rg3",rg,ard['Actions']['RG3'])
+              parent_sets[an]['RG3'].append(ard['Actions']['RG3'])
+            if len(ard['Actions']['RG4'])>0:
+              ards[an]['RG4'].append(sorted(list(ard['Actions']['RG4'])))
+              ard['Actions']['RG4'].add('R::'+ss+'/'+rg)
+              #print("Parent set addition for rg4",rg,ard['Actions']['RG4'])
+              parent_sets[an]['RG4'].append(ard['Actions']['RG4'])
     elif strategy[aw]=='SUB':
       for ss in sxadict[aw]:
         ard['Actions']['SUB']=set()
         for rg in sxadict[aw][ss]:
-          for nm in sxadict[aw][ss][rg]:
+          if True:
             for an in sxadict[aw][ss][rg]:
-              if an==nm:
+              if True:
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
                   if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='SUB' and ss in sxadict['A']:
@@ -1805,29 +1814,30 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                 if aw=='W' and strategy['A'] is not None and 'A' in sxadict and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg] and (strategy['A']=='SUB' or (strategy['A']=='RG' and rg in sxadict['A'][ss])):
                   for rg1 in sxadict['A'][ss]:
                     for an1 in sxadict['A'][ss][rg1]:
-                      if an1==nm:
+                      if an1==an:
                         for ac in sxadict['A'][ss][rg1][an1]:
                           ard['Actions']['SUB'].add(ac)
+                        break
                 # Local W and local A absorb local R actions (so SUB and RG)
                 if aw!='R' and strategy['R'] is not None and 'R' in sxadict and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg] and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])):
                   for rg1 in sxadict['R'][ss]:
                     for an1 in sxadict['R'][ss][rg1]:
-                      if an1==nm:
+                      if an1==an:
                         for ac in sxadict['R'][ss][rg1][an1]:
                           ard['Actions']['SUB'].add(ac)
                         break
-                break
-        if len(ard['Actions']['SUB'])>0:
-          ards[nm]['SUB'].append(sorted(list(ard['Actions']['SUB'])))
-          ard['Actions']['SUB'].add('S::'+ss)
-          parent_sets[nm]['SUB'].append(ard['Actions']['SUB'])
-    elif strategy[aw]=='MG':
+              if len(ard['Actions']['SUB'])>0:
+                ards[an]['SUB'].append(sorted(list(ard['Actions']['SUB'])))
+                ard['Actions']['SUB'].add('S::'+ss)
+                parent_sets[an]['SUB'].append(ard['Actions']['SUB'])
+    """
+    elif strategy[aw]=='MG': # broken code. MG are not supported for now, we need to absorb management group names rather than subs or rgs.
       ard['Actions']['MG']=set()
       for ss in sxadict[aw]:
         for rg in sxadict[aw][ss]:
-          for nm in sxadict[aw][ss][rg]:
+          if True:
             for an in sxadict[aw][ss][rg]:
-              if an==nm:
+              if True:
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
                   if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='MG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
@@ -1846,16 +1856,17 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                 if aw!='R' and strategy['R'] is not None and 'R' in sxadict and strategy['R']=='MG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
                   for ac in sxadict['R'][ss][rg][an]:
                     ard['Actions']['MG'].add(ac)
-                break
-      if len(ard['Actions']['MG'])>0:
-        ards[nm]['MG'].append(sorted(list(ard['Actions']['MG'])))
-        parent_sets[nm]['MG'].append(ard['Actions']['MG'])
+                #break
+            if len(ard['Actions']['MG'])>0:
+              ards[an]['MG'].append(sorted(list(ard['Actions']['MG'])))
+              parent_sets[an]['MG'].append(ard['Actions']['MG'])
+    """
 #  print("parent sets")
 #  for aP in parent_sets:
 #    print("  principal",aP,p2n[aP])
 #    print("  ..",parent_sets[aP])
 #  print(" ")
-  desired_roles=reason_clusterwide(cluster,parent_sets,True)
+  desired_roles=reason_clusterwide(cluster,parent_sets,batch)
   #print("REASONING")
   #print(desired_roles)
   #print("")
