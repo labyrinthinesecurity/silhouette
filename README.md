@@ -180,6 +180,8 @@ Ground truth permissions retrieved from Azure Activity always operate at the res
 If you are ready to customize cluster roles, you should first try to set desired_silhouette to resource group level at most (desired_silhouette=332) 
 If this the resulting condensate generates too many roles, try to set one of W, A or R to subscription level
 
+For the record, desired_silhouette=438 corresponds to subscription level for all W, A and R axis.
+
 ### Manual review 
 The script condensate.py does this W/A/R fine-tuning layer for you, but it MUST be reviewed manually, because it is not 100% acurate.
 

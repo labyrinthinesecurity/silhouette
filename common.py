@@ -1746,11 +1746,11 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                   # Local R actions are absorbed by local A actions
                   if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
                     #print("  case R absorbed by A: rg",rg,"cat",rgcat,"absorbed",ac)
-                    pass
+                    continue
                   # Local R and A actions are absorbed by local W actions
                   elif aw!='W' and strategy['W'] is not None and 'W' in sxadict and strategy['W']=='RG' and ss in sxadict['W'] and rg in sxadict['W'][ss] and an in sxadict['W'][ss][rg]:
                     #print("  case R+A absorbed by W: rg",rg,"cat",rgcat,"absorbed",ac)
-                    pass
+                    continue
                   else:
                     # Local W actions cannot be absorbed by an upper authority. So we add them. 
                     ard['Actions'][rgcat].add(ac)
@@ -1760,14 +1760,14 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
 #                      pass
                 # Local W absorbs local A actions (so RG actions)
                 if aw=='W' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='RG' and ss in sxadict['A'] and rg in sxadict['A'][ss] and an in sxadict['A'][ss][rg]:
-                  for ac in sxadict['A'][ss][rg][an]:
-                    #print("  Case W>A: rg",rg,"cat",rgcat,"add",ac)
-                    ard['Actions'][rgcat].add(ac)
+                  for other_ac in sxadict['A'][ss][rg][an]:
+                    #print("  Case W>A: rg",rg,"cat",rgcat,"add",other_ac)
+                    ard['Actions'][rgcat].add(other_ac)
                 # Local W and local A absorb local R actions
                 if aw!='R' and strategy['R'] is not None and 'R' in sxadict and strategy['R']=='RG' and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg]:
-                  for ac in sxadict['R'][ss][rg][an]:
-                    #print("  Case W|A>R: rg",rg,"cat",rgcat,"add",ac)
-                    ard['Actions'][rgcat].add(ac)
+                  for other_ac in sxadict['R'][ss][rg][an]:
+                    #print("  Case W|A>R: rg",rg,"cat",rgcat,"add",other_ac)
+                    ard['Actions'][rgcat].add(other_ac)
             if len(ard['Actions']['RG0'])>0:
               ards[an]['RG0'].append(sorted(list(ard['Actions']['RG0'])))
               ard['Actions']['RG0'].add('R::'+ss+'/'+rg)
@@ -1803,10 +1803,10 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                 for ac in sxadict[aw][ss][rg][an]:
                   # Local R actions are absorbed by local A actions
                   if aw=='R' and strategy['A'] is not None and 'A' in sxadict and strategy['A']=='SUB' and ss in sxadict['A']:
-                    pass
+                    continue
                   # Local R and A actions are absorbed by local W actions
                   elif aw!='W' and strategy['W'] is not None and 'W' in sxadict and strategy['W']=='SUB' and ss in sxadict['W']:
-                    pass
+                    continue
                   else:
                     # Local W actions cannot be absorbed. We add them.
                     ard['Actions']['SUB'].add(ac)
@@ -1815,16 +1815,16 @@ def generate_condensate_with_options(pk,cluster,desired_silhouette,verbose,batch
                   for rg1 in sxadict['A'][ss]:
                     for an1 in sxadict['A'][ss][rg1]:
                       if an1==an:
-                        for ac in sxadict['A'][ss][rg1][an1]:
-                          ard['Actions']['SUB'].add(ac)
+                        for other_ac in sxadict['A'][ss][rg1][an1]:
+                          ard['Actions']['SUB'].add(other_ac)
                         break
                 # Local W and local A absorb local R actions (so SUB and RG)
                 if aw!='R' and strategy['R'] is not None and 'R' in sxadict and ss in sxadict['R'] and rg in sxadict['R'][ss] and an in sxadict['R'][ss][rg] and (strategy['R']=='SUB' or (strategy['R']=='RG' and rg in sxadict['R'][ss])):
                   for rg1 in sxadict['R'][ss]:
                     for an1 in sxadict['R'][ss][rg1]:
                       if an1==an:
-                        for ac in sxadict['R'][ss][rg1][an1]:
-                          ard['Actions']['SUB'].add(ac)
+                        for other_ac in sxadict['R'][ss][rg1][an1]:
+                          ard['Actions']['SUB'].add(other_ac)
                         break
               if len(ard['Actions']['SUB'])>0:
                 ards[an]['SUB'].append(sorted(list(ard['Actions']['SUB'])))
