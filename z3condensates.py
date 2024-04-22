@@ -17,41 +17,46 @@ b1 = Const('b1', scopes)
 a2 = Const('a2', permissions)
 b2 = Const('b2', permissions)
 
+A=StringVal("A")
+Z=StringVal("Z")
 TIERBlo=StringVal("BA")
 TIERBhi=StringVal("BZ")
 TIERClo=StringVal("CA")
 TIERChi=StringVal("CZ")
 TIERDlo=StringVal("DA")
 TIERDhi=StringVal("DZ")
+TIERlast=StringVal("ZZ")
 
-# Axiom 1A: f(a1) is in the same equivalence class as f(b1) (under the equivalence relation S) implies a2 P b2
-s.add(Implies(S(f(a1), f(b1)), P(a2, b2)))
-
-# Axiom 1B: f(a1) is NOT in the same equivalence class as f(b1) (under the equivalence relation S) implies NOT a2 P b2
-s.add(Implies(Not(S(f(a1), f(b1))), Not(P(a2, b2))))
-
-# Axiom 2A: a2 = b2 implies (f(a1) and f(b1) are class representatives of the same equivalence class of S
-s.add(Implies(a2 == b2, S(f(a1), f(b1))))
-
-# Axiom 2B: a1 = b1 implies (f(a1) and f(b1) are class representatives of the same equivalence class of S
+# Axiom 1
 s.add(Implies(a1 == b1, f(a1) == f(b1)))
-s.add(Implies(f(a1) == f(b1),S(f(a1),f(b1))))
-
 s.add(Implies(And(a1>=TIERBlo,a1<=TIERBhi,b1>=TIERBlo,b1<=TIERBhi),S(f(a1), f(b1))))
 s.add(Implies(And(a1>=TIERClo,a1<=TIERChi,b1>=TIERClo,b1<=TIERChi),S(f(a1), f(b1))))
 s.add(Implies(And(a1>=TIERDlo,a1<=TIERDhi,b1>=TIERDlo,b1<=TIERDhi),S(f(a1), f(b1))))
 
+# Axiom 2
+s.add(Implies(a2 == b2, S(f(a1), f(b1))))
+
+# Axiom 3
+s.add(Implies(f(a1) == f(b1),S(f(a1),f(b1))))
+
+# Bind f() to P() and finish Axiom 1
+s.add(Implies(S(f(a1), f(b1)), P(a2, b2)))
+s.add(Implies(Not(S(f(a1), f(b1))), Not(P(a2, b2))))
+
 # For clarity, enforce minimum length for string constants
-s.add(Length(a1) == 2, Length(a2) == 1)
-s.add(Length(b1) == 2, Length(b2) == 1)
+s.add(Length(a1) == 2)#, Length(a2) == 1)
+s.add(Length(b1) == 2)#, Length(b2) == 1)
 
 # For clarity, prevent "scopes" and "permissions" domains from overlapping
-s.add(a1!=a2,a1!=b2)
-s.add(b1!=a2,b1!=b2)
+#s.add(a1!=a2,a1!=b2)
+#s.add(b1!=a2,b1!=b2)
+s.add(a2>=A,b2>=A,a2<=Z,b2<=Z)
+
+s.add(a1<TIERlast,a2<TIERlast)
 
 print("")
 print("Part 1/Looking for SAT non-obvious examples")
-print("  * Find P-equivalent pairs in the same scope")
+print("  * Find P-equivalent pairs in the litteraly same scope")
 s.push()
 s.add(f(a1) == f(b1), P(a2,b2))
 result = s.check()
