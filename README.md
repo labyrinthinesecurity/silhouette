@@ -180,7 +180,9 @@ Ground truth permissions retrieved from Azure Activity always operate at the res
 If you are ready to customize cluster roles, you should first try to set desired_silhouette to resource group level at most (desired_silhouette=332) 
 If this the resulting condensate generates too many roles, try to set one of W, A or R to subscription level
 
-Here are a few examples of such silhouette configurations based on the WAR norme table, by increasing order of minimization:
+WARNING: setting W, A or R to "subscription" level means that all W, A or R permissions encountered in Azure activity logs will be elevated to this level in the resulting condensate. This is not least privilege, so you should investigate the resulting condensate and attempt to lower some W, A or R permissions manually.
+
+Here are a few examples of silhouette configurations based on the WAR norm table (by increasing order of minimization):
 - 438 corresponds to subscription level for W, A and R
 - 433 corresponds to subscription level for W, resource group level for A and R
 - 338 corresponds to resource group level for W, subscription level for A and R 
@@ -188,7 +190,10 @@ Here are a few examples of such silhouette configurations based on the WAR norme
 - 332 corresponds to resource group level for W, A and R
 
 ### Manual review 
-The script condensate.py does this W/A/R fine-tuning layer for you, but it MUST be reviewed manually, because it is not 100% acurate.
+The script condensate.py does W/A/R fine-tuning for you, but it MUST be reviewed manually, because it is not 100% acurate:
+
+1) as explained above, condensate.py will elevate all permissions to the max scope it is entitled by the desired silhouette 
+2) generated roles are based on similarity between permissions of different SPNs, sometimes if common permissions are used in very different contexts, the grouping may be too coarse 
 
 ## A word on the reward...
 
