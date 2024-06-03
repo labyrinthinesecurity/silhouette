@@ -166,9 +166,13 @@ s.add(c1>=CYL10_low,c1<CYL30_hi)
 
 # Vertical Congrence is slightly less strong than horizontal congruence:
 # If two scopes belong to the same cylinder, they are SP-equivalent
-s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL10_low,a1<=CYL10_hi,b1>=CYL10_low,b1<=CYL10_hi),SP(f(a1), f(b1)))))
-s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL20_lo,a1<=CYL20_hi,b1>=CYL20_lo,b1<=CYL20_hi),SP(f(a1), f(b1)))))
-s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL30_lo,a1<=CYL30_hi,b1>=CYL30_lo,b1<=CYL30_hi),SP(f(a1), f(b1)))))
+#s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL10_low,a1<=CYL10_hi,b1>=CYL10_low,b1<=CYL10_hi),SP(f(a1), f(b1)))))
+#s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL20_lo,a1<=CYL20_hi,b1>=CYL20_lo,b1<=CYL20_hi),SP(f(a1), f(b1)))))
+#s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL30_lo,a1<=CYL30_hi,b1>=CYL30_lo,b1<=CYL30_hi),SP(f(a1), f(b1)))))
+s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL10_low,a1<=CYL10_hi,b1>=CYL10_low,b1<=CYL10_hi),f(a1)==f(b1))))
+s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL20_lo,a1<=CYL20_hi,b1>=CYL20_lo,b1<=CYL20_hi),f(a1)==f(b1))))
+s.add(ForAll([a1,b1],Implies(And(IsTuple(a1,a2),IsTuple(b1,b2),a1>=CYL30_lo,a1<=CYL30_hi,b1>=CYL30_lo,b1<=CYL30_hi),f(a1)==f(b1))))
+
 
 print("")
 print("Part 3/Prove that Vertical congruence is not symmetrical and intransitive")
