@@ -955,20 +955,20 @@ def scores2csv(data):
   for d in data:
     data[d]['pid']=d
   csv_file = f"sorted_NHIs_{current_timestamp}.csv"
-  headers = ["pid", "name","type","uras","memberships","WAR","D", "A", "dataActions"]
+  headers = ["pid", "name","type","uras","memberships","WAR","blast_radius","D", "A"]
   with open(csv_file, "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(headers)
     for entry in data:
         pid = data[entry].get("pid", "")
         WAR = data[entry].get("WAR", "")
+        radius = data[entry].get("blast_radius", "")
         spnType = data[entry].get("type", "")
         spnName = data[entry].get("name", "")
         URAs = data[entry].get("uras", "")
         D = data[entry].get("D", "")
         A = data[entry].get("A", "")
         groups = data[entry].get("memberships", "")
-        dataActions = data[entry].get("dataActions", "")
         writer.writerow([
                 pid,
                 spnName,
@@ -976,9 +976,9 @@ def scores2csv(data):
                 URAs,
                 groups,
                 WAR,
+                radius,
                 D,
-                A,
-                dataActions
+                A
         ])
   print(f"CSV file '{csv_file}' has been created successfully!")
 
