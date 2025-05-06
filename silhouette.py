@@ -3,9 +3,9 @@ from native import *
 import subprocess
 import csv,os
 import math
-import Levenshtein
 import argparse
 from datetime import datetime
+from ultrametry import *
 
 current_date = datetime.now()
 current_timestamp = current_date.strftime("%Y-%m-%d")
@@ -31,7 +31,7 @@ gperms={}
 frs={}
 groups={}
 group={}
-origin_str = "once upon a time"
+hierarchy = None
 
 silhouette={
         'superadmin': {
@@ -603,7 +603,6 @@ def generate_WAR_norms(single,combined):
         spn[role['pid']]['minR']=0
       spn[role['pid']]['type']=spnscache[role['pid']]['servicePrincipalType']
       spn[role['pid']]['name']=spnscache[role['pid']]['displayName']
-      #spn[role['pid']]['levenshtein']=get_levenshtein(spnscache[role['pid']]['displayName'])
     else:
       if args.verbose:
         print(role['pid'],"not in Entra, so we may ignore it")
@@ -822,6 +821,16 @@ def generate_WAR_norms(single,combined):
   spn_to_delete=set()
   for s in spn:
     calculate_WAR(spn[s],spn[s]['minW'],spn[s]['minA'],spn[s]['minR'])
+    pairs=None
+    permiplets=None
+    if spn[s]['dataActions']:
+      permiplets = group_permiplets_by_action_scope(hierarchy,spn[s]['dataActions_dict'], collapsed=False)
+      blast_radius,pairs=process_pairs(hierarchy,permiplets)
+    else:
+      blast_radius=None
+    if args.verbose and single==False:
+      print(f"  blast radius of {s}: {blast_radius}")
+    spn[s]['blast_radius']=blast_radius
     if spn[s]['WAR']<1 and spn[s]['A'] == False and spn[s]['D'] == False and spn[s]['dataActions'] == False:
       if args.verbose:
         print("DELETING",s,"because it has no Azure perms")
@@ -838,8 +847,8 @@ def generate_WAR_norms(single,combined):
         frs[s].add(rdscope)
       if args.verbose and (args.single is None):
         print("  resulting FRS for SPN",s,"is",frs[s])
-  for s in spn_to_delete:
-    del(spn[s])
+  for sd in spn_to_delete:
+    del(spn[sd])
   if args.frs:
     headers = ["pid", "rdid"]
     with open("AZURE_FRS.csv", "w", newline="") as f:
@@ -863,6 +872,7 @@ def generate_WAR_norms(single,combined):
     print("  Azure Control Plane> WAR norm:",spn[s]['WAR'])
     print("  Entra Control Plane> can assign roles:",spn[s]['A'])
     print("  Entra Control Plane> can define roles:",spn[s]['D'])
+    '''
     if args.verbose:
       for item in spn[s]['war_permset']:
         print("  Azure Control Plane>",item)
@@ -871,11 +881,26 @@ def generate_WAR_norms(single,combined):
       for item in spn[s]['rdids']:
         cnt+=1
         print("  Azure Control Plane>",item+":"+str(spn[s]['resolutions'][cnt]))
+    '''
     print("")
-    print("  Azure Data Plane> can perform data Actions:",spn[s]['dataActions'])
-    for scope in spn[s]['dataActions_dict']:
-      for da in spn[s]['dataActions_dict'][scope]:
-        print("  Azure Data Plane"+str(scope)+">",da)
+    print("  Azure Data Plane> blast radius:",spn[s]['blast_radius'])
+    if args.verbose and spn[s]['dataActions']:
+      ps = list(permiplets)
+      if len(ps) == 1:
+        scope, depth, impact = ps[0]
+        print("  Azure Data Plane> no pairs found")
+      else:
+        found=False
+        lca=None
+        lca_depth=None
+        for p in pairs:
+          if p['distance']==blast_radius:
+            print("  Azure Data Plane> maximum pair: ",p['p1'][0],p['p2'][0])
+#            if 'p2' in p:
+#              print("    ",p['p2'][0])
+            _,lca_depth = least_common_ancestor(hierarchy, p['p1'][0], p['p2'][0], collapsed=False, verbose=True)
+            found=True
+            break
   else:
     if args.live:
       with open('groups_roles.json','w') as file:
@@ -926,9 +951,6 @@ def generate_spns_cache():
   with open('spns_cache.json', 'w') as file:
     json.dump(spnscache, file, indent=2)
 
-def get_levenshtein(name):
-  return Levenshtein.distance(origin_str.lower(), name.lower())
-
 def scores2csv(data):
   for d in data:
     data[d]['pid']=d
@@ -961,14 +983,9 @@ def scores2csv(data):
   print(f"CSV file '{csv_file}' has been created successfully!")
 
 
-'''
-az_ad_sp()
-sys.exit()
-'''
-
 if args.version:
   print("Azure Silhouette, a NHI sorter and minimizer")
-  print("  Version 2.0, by Christophe Parisel (labyrinthinesecurity)")
+  print("  Version 2.1, by Christophe Parisel (labyrinthinesecurity)")
   print("  Licensed under LGPL, use at your own risks")
   print("  https://github.com/labyrinthinesecurity/silhouette")
   sys.exit()
@@ -984,6 +1001,11 @@ if args.single and args.live==False:
   if os.path.exists('gperms.json'):
     with open('gperms.json','r') as file:
       gperms=json.load(file)
+  if os.path.exists('management_hierarchy.csv'):
+    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+  else:
+    save_hierarchy_to_csv("management_hierarchy.csv")
+    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   combined=fetch_combined(args.single)
 elif args.live == False:
   if os.path.exists('groups_roles.json'):
@@ -995,6 +1017,11 @@ elif args.live == False:
   if os.path.exists('gperms.json'):
     with open('gperms.json','r') as file:
       gperms=json.load(file)
+  if os.path.exists('management_hierarchy.csv'):
+    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+  else:
+    save_hierarchy_to_csv("management_hierarchy.csv")
+    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   if os.path.exists('ARG.json'):
     with open('ARG.json','r') as file:
       combined=json.load(file)
@@ -1002,6 +1029,8 @@ elif args.live == False:
     combined=fetch_combined(args.single)
 else:
   combined=fetch_combined(args.single)
+  save_hierarchy_to_csv("management_hierarchy.csv")
+  hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
 
 if args.single:
   args.apps=False
