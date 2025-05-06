@@ -101,6 +101,8 @@ This makes subsequent runs much faster, but subsequent runs won't pull any updat
 To prevent drift and to keep silhouette in sync with your actual live configuration, you should refresh these files by explicitely setting the *--live* option
 
 ## Understanding Silhouette scores
+
+### Control plane scores
 The WAR norm doesn't measure IAM management permissions (i.e. the capability to define or assign roles). This latter capability is measured by the DA norm, which is not implemented in Silhouette.
 
 Concretely, this means that the following IAM permissions are being ignored by the WAR norm:
@@ -114,7 +116,7 @@ Concretely, this means that the following IAM permissions are being ignored by t
 - microsoft.managedidentity/assign/action
 - microsoft.managedidentity/*/assign/action
 
-### Examples
+#### Examples
 Here are a few examples of silhouette configurations based on the WAR norm table shown below (by decreasing order of privileges):
 - 999 corresponds to Tenant admin
 - 888 corresponds to management group level superadmin
@@ -128,6 +130,9 @@ Here are a few examples of silhouette configurations based on the WAR norm table
 - 000 corresponds to no control plane rights (except IAM roles management, as explained above)
 
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.0/WARnormTable.PNG">
+
+### Data plane scores
+The blast radius measures lateral motion across your data plane. In anticipation of a SPN compromission, you know the breadth of data breach and/or data exfiltration.
 
 ## Additional resources and documentation
 - Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)

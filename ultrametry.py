@@ -422,32 +422,11 @@ def explain(df,pid):
       break
   print("blast radius:",blast_radius)
 
-def generate_planeswalk(war_path, blast_path, sorting="control"):
+def plot_crossplane0(input_path):
     """
-    Generates a unified CSV report with PID, name, WAR score, dataActions flag, and blast radius.
-
-    Parameters:
-    - war_path: Path to the sorted NHIs CSV file.
-    - blast_path: Path to the sorted blast radius CSV file.
-    - output_path: Path where the resulting full_scope.csv will be saved.
-    """
-    df_war = pd.read_csv(war_path)
-    df_blast = pd.read_csv(blast_path)
-
-    merged = pd.merge(df_war, df_blast, on="pid", how="left")
-
-    final_df = merged[["pid", "name", "WAR", "dataActions", "blast_radius"]]
-
-    if sorting=="control":
-      final_df = final_df.sort_values( by=["WAR", "blast_radius", "pid"], ascending=[False, False, True])
-    elif sorting=="data":
-      final_df = final_df.sort_values( by=["blast_radius", "WAR", "pid"], ascending=[False, False, True])
-    opath=f"planeswalk_by_{sorting}.csv"
-    final_df.to_csv(opath, index=False)
-
-def plot_controlPlane_vs_dataPlane(input_path, jitter_strength=0.004):
-    """
-    Generates a Seaborn scatter plot showing log10(WAR) vs blast_radius.
+    Generates a Seaborn scatter plot showing log10(WAR) vs blast_radius,
+    with point sizes reflecting density and color indicating 'type'.
+    Also draws a reference divide line from (0,0) where blast_radius = log10(WAR)/3.
 
     Parameters:
     - input_path: Path to the full_scope.csv file.
@@ -455,33 +434,135 @@ def plot_controlPlane_vs_dataPlane(input_path, jitter_strength=0.004):
     # Load data
     df = pd.read_csv(input_path)
 
-    # Clean data: remove rows with missing or non-positive WAR or blast_radius
-    df = df[(df["WAR"] >= 0) & (df["blast_radius"].notnull())]
+    # Clean data
+    df["WAR"] = df["WAR"].fillna(0)
+    df["blast_radius"] = df["blast_radius"].fillna(0.0)
+    df = df[df["type"].notnull()]
 
-    # Compute log10(WAR)
-    df["log10_WAR/3"] = (1/3)*np.log10(1.0+df["WAR"])
-    #df["blast_radius"] = df["blast_radius"] ** 0.2
-    rng = np.random.default_rng(seed=42)
-    df["log10_WAR/3"] = df["log10_WAR/3"] + rng.normal(0, jitter_strength, size=len(df))
+    # Compute log10(WAR)/3
+    df["log10_WAR/3"] = (1 / 3) * np.log10(1.0 + df["WAR"])
+
+    # Count duplicates at each (x, y, type) combination
+    grouped = df.groupby(["log10_WAR/3", "blast_radius", "type"]).size().reset_index(name='count')
+
+    # Count identity types
+    total_count = len(df)
+    app_count = (df["type"] == "Application").sum()
+    mi_count = (df["type"] == "ManagedIdentity").sum()
 
     # Set aesthetic style
     sns.set(style="whitegrid", context="notebook")
 
     # Create scatter plot
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(16, 8))
     scatter = sns.scatterplot(
-        data=df,
-        y="blast_radius",
+        data=grouped,
         x="log10_WAR/3",
+        y="blast_radius",
+        hue="type",
+        size="count",               # Ball size = count of overlapping points
+        sizes=(40, 300),
         edgecolor="black",
-        s=80
+        palette="Set2",
+        alpha=0.8
     )
 
     # Titles and labels
-    plt.title("blast_radius(Log₁₀(WAR)/3)", fontsize=16)
+    plt.title("Blast Radius vs. log₁₀(WAR)/3 by Identity Type", fontsize=16)
     plt.xlabel("log₁₀(WAR)/3", fontsize=14)
     plt.ylabel("Blast Radius", fontsize=14)
 
-    # Show the plot
+    handles, labels = scatter.get_legend_handles_labels()
+    plt.legend(handles=handles, title="Identity Type and Count", bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    # Add caption with counts
+    caption = f"Total identities: {total_count}  |  Applications: {app_count}  |  Managed Identities: {mi_count}"
+    plt.figtext(0.5, -0.05, caption, wrap=True, horizontalalignment='center', fontsize=12)
+
+    # Finalize
     plt.tight_layout()
-    plt.savefig("planeswalk.png")
+    plt.savefig("crossplane.png", bbox_inches='tight')
+    #print(grouped[(grouped["log10_WAR/3"] < 3.0) & (grouped["blast_radius"] == 0.0)])
+
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def plot_crossplane(input_path, jitter_strength=0.01):
+    """
+    Generates a Seaborn scatter plot showing log10(WAR) vs blast_radius,
+    with horizontal jitter and point sizes reflecting density.
+    Displays total counts for all identities, Applications, and Managed Identities.
+
+    Parameters:
+    - input_path: Path to the full_scope.csv file.
+    - jitter_strength: Standard deviation of horizontal jitter (default 0.01).
+    """
+    # Load data
+    df = pd.read_csv(input_path)
+
+    # Clean data
+    df = df[df["WAR"] >= 0]
+    df["blast_radius"] = df["blast_radius"].fillna(0.0)
+    df = df[df["type"].notnull()]
+
+    # Compute log10(WAR)/3
+    df["log10_WAR/3"] = (1 / 3) * np.log10(1.0 + df["WAR"])
+
+    # Apply horizontal jitter
+    rng = np.random.default_rng(seed=42)
+    df["jittered_x"] = df["log10_WAR/3"] + rng.normal(0, jitter_strength, size=len(df))
+
+    # Count duplicates based on original values for proper size scaling
+    df["x_bin"] = df["log10_WAR/3"].round(4)
+    df["y_bin"] = df["blast_radius"].round(4)
+    grouped = df.groupby(["x_bin", "y_bin", "type"]).size().reset_index(name='count')
+
+    # Merge count back to original dataframe
+    df = pd.merge(
+        df,
+        grouped,
+        how="left",
+        left_on=["x_bin", "y_bin", "type"],
+        right_on=["x_bin", "y_bin", "type"]
+    )
+
+    # Count identity types
+    total_count = len(df)
+    app_count = (df["type"] == "Application").sum()
+    mi_count = (df["type"] == "ManagedIdentity").sum()
+
+    # Set aesthetic style
+    sns.set(style="whitegrid", context="notebook")
+
+    # Create scatter plot
+    plt.figure(figsize=(16, 8))
+    scatter = sns.scatterplot(
+        data=df,
+        x="jittered_x",
+        y="blast_radius",
+        hue="type",
+        size="count",
+        sizes=(40, 300),
+        edgecolor="black",
+        palette="Set2",
+        alpha=0.8
+    )
+
+    # Titles and labels
+    plt.title("Blast Radius vs. log₁₀(WAR)/3 by Identity Type", fontsize=16)
+    plt.xlabel("log₁₀(WAR)/3 (with jitter)", fontsize=14)
+    plt.ylabel("Blast Radius", fontsize=14)
+
+    # Legends
+    handles, labels = scatter.get_legend_handles_labels()
+    plt.legend(handles=handles, title="Type & Count", bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    # Caption with counts
+    caption = f"Total identities: {total_count}  |  Applications: {app_count}  |  Managed Identities: {mi_count}"
+    plt.figtext(0.5, -0.05, caption, wrap=True, horizontalalignment='center', fontsize=12)
+
+    # Finalize
+    plt.tight_layout()
+    plt.savefig("crossplane.png", bbox_inches='tight')
