@@ -1,7 +1,7 @@
 # Azure Silhouette, a SPN sorter and roles minimizer
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/silhouette_logo.PNG" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/silhouette_logo_ultrametry.png" width="50%">
 </div>
 
 ## Introduction
@@ -129,12 +129,16 @@ Here are a few examples of silhouette configurations based on the WAR norm table
 - 026 corresponds to subresource level for A, resource group level for R, and no W action
 - 000 corresponds to no control plane rights (except IAM roles management, as explained above)
 
+<div align="center">
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/WARnormTable.PNG">
+</div>
 
 ### Data plane scores
 The blast radius measures lateral motion across your data plane. In anticipation of a SPN compromission, you know the maximum extent of data breach and/or a data exfiltration.
 
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius.png">
+<div align="center">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius.png" width="70%">
+</div>
 
 ## Additional resources and documentation
 - Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)
