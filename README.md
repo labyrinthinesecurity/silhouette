@@ -1,7 +1,7 @@
 # Azure Silhouette, a SPN sorter and roles minimizer
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette_logo.PNG" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/silhouette_logo.PNG" width="50%">
 </div>
 
 ## Introduction
@@ -21,7 +21,7 @@ Control Plane scores are generated with the help of a new norm called the *WAR n
 Data Plane scores are generated with the help of a new distance called the *blast radius*. It ranges from 0 (no data actions) to 1.0 (tenantwide lateral motion). The blast radius captures the maximum breadth of a data leakage or a data forgery.
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.0/rbac_distance.jpeg" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/rbac_distance.jpeg" width="50%">
 </div>
 
 ## Pre-requisites
@@ -129,10 +129,12 @@ Here are a few examples of silhouette configurations based on the WAR norm table
 - 026 corresponds to subresource level for A, resource group level for R, and no W action
 - 000 corresponds to no control plane rights (except IAM roles management, as explained above)
 
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.0/WARnormTable.PNG">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/WARnormTable.PNG">
 
 ### Data plane scores
-The blast radius measures lateral motion across your data plane. In anticipation of a SPN compromission, you know the breadth of data breach and/or data exfiltration.
+The blast radius measures lateral motion across your data plane. In anticipation of a SPN compromission, you know the maximum extent of data breach and/or a data exfiltration.
+
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius.png">
 
 ## Additional resources and documentation
 - Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)

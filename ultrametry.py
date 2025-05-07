@@ -484,11 +484,6 @@ def plot_crossplane0(input_path):
     plt.savefig("crossplane.png", bbox_inches='tight')
     #print(grouped[(grouped["log10_WAR/3"] < 3.0) & (grouped["blast_radius"] == 0.0)])
 
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 def plot_crossplane(input_path, jitter_strength=0.01):
     """
     Generates a Seaborn scatter plot showing log10(WAR) vs blast_radius,
@@ -566,3 +561,4 @@ def plot_crossplane(input_path, jitter_strength=0.01):
     # Finalize
     plt.tight_layout()
     plt.savefig("crossplane.png", bbox_inches='tight')
+    print(grouped[(grouped["y_bin"] >= 0.0) & (grouped["x_bin"] >= 0.0)])
