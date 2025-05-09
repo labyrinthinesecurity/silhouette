@@ -982,7 +982,6 @@ def scores2csv(data):
         ])
   print(f"CSV file '{csv_file}' has been created successfully!")
 
-
 if args.version:
   print("Azure Silhouette, a NHI sorter and minimizer")
   print("  Version 2.1, by Christophe Parisel (labyrinthinesecurity)")
@@ -1031,6 +1030,13 @@ else:
   save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
   combined=fetch_combined(args.single)
   hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+
+hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+shunts = {}
+shunts['native']= hierarchy
+for f in os.listdir("."):
+  if f.startswith("shunt_") and f.endswith(".csv"):
+    shunts[f[6:-4]] = pd.read_csv(f)
 
 if args.single:
   args.apps=False
