@@ -1004,7 +1004,7 @@ if args.single and args.live==False:
   if os.path.exists('management_hierarchy.csv'):
     hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   else:
-    save_hierarchy_to_csv("management_hierarchy.csv")
+    save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
     hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   combined=fetch_combined(args.single)
 elif args.live == False:
@@ -1020,7 +1020,7 @@ elif args.live == False:
   if os.path.exists('management_hierarchy.csv'):
     hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   else:
-    save_hierarchy_to_csv("management_hierarchy.csv")
+    save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
     hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   if os.path.exists('ARG.json'):
     with open('ARG.json','r') as file:
@@ -1028,8 +1028,8 @@ elif args.live == False:
   else:
     combined=fetch_combined(args.single)
 else:
+  save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
   combined=fetch_combined(args.single)
-  save_hierarchy_to_csv("management_hierarchy.csv")
   hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
 
 if args.single:

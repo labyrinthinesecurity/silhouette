@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime,timedelta
 import functools,csv
 from itertools import combinations
-
+from native import get_token
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -66,7 +66,8 @@ def walk_tree(parent_id):
             if child_type == "Microsoft.Management/managementGroups":
                 walk_tree(child_id)
 
-def save_hierarchy_to_csv(filename):
+def save_hierarchy_to_csv(tenant_id,filename):
+  walk_tree(tenant_id)
   with open(filename, mode="w", newline="") as file:
     writer = csv.writer(file)
     writer.writerow(["child", "parent"])
