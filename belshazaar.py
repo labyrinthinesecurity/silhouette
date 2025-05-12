@@ -26,16 +26,26 @@ Pair.declare('mkPair', ('scope', StringSort()), ('perm', StringSort()))
 Pair = Pair.create()
 mkPair, scope, perm = Pair.mkPair, Pair.scope, Pair.perm
 
+ImpactPair = Datatype('ImpactPair')
+ImpactPair.declare('mkImpactPair', ('scope', StringSort()), ('impact', IntSort()))
+ImpactPair = ImpactPair.create()
+mkImpactPair, scope, impact = ImpactPair.mkImpactPair, ImpactPair.scope, ImpactPair.impact
+
+
 # Create Z3 terms with consistent pairing
 S_z3_pairs = [(mkPair(StringVal(scope_), StringVal(perm_)), scope_, perm_) for (scope_, perm_) in S_list]
 S_z3 = [z for (z, _, _) in S_z3_pairs]
 
+S2_z3_pairs= []
+
 # Declare normal form function
 NF = Function('NF', Pair, Pair)
+NFI = Function('NFI', ImpactPair, ImpactPair)
 solver = Solver()
 
 # Idempotence
 x = Const('x', Pair)
+xi = Const('xi', ImpactPair)
 solver.add(ForAll([x], NF(NF(x)) == NF(x)))
 
 constraints = []
@@ -164,22 +174,6 @@ S_z3_pairs = [
 ]
 new_reps = set()
 
-
-# **Prune** collected constraints to drop any whose LHS was consumed
-valid_terms = {t for (t, _, _) in S_z3_pairs}
-#print("valid terms")
-#for v in valid_terms:
-#  print(valid_terms)
-#print()
-
-pruned = [(t, r) for (t, r) in constraints if t in valid_terms]
-
-# Now add **only** these pruned constraints to the solver
-#print("pruned:")
-for (t, r) in pruned:
-#  print(t,r)
-  solver.add(NF(t) == r)
-
 print("\nSolver constraints before solving:")
 for sa in solver.assertions():
   print(sa)
@@ -197,5 +191,70 @@ if solver.check() == sat:
     for rep, elems in parts.items():
         print(f"  {rep} → {elems}")
         print()
+    coarse_partition=rep in ['R','W','S']
+    print("coarse?",coarse_partition)
+    if coarse_partition:
+      solver=Solver()
+      solver.add(ForAll([xi], NFI(NFI(xi)) == NFI(xi)))
+      # Unary rule: if perm ends with 'S', normalize to (scope, '2')
+      for zterm, sc, im in S_z3_pairs:
+        if pr.endswith('S'):
+            print(f"Unary rule applied: Term with perm '{pr}' is rewritten to (scope='{sc}', perm='2')")
+            print(f"consuming {sc},{pr}")
+            rep = mkImpactPair(StringVal(sc), IntVal(2))
+            constraints.append((zterm,rep))
+            new_reps.add((rep, sc, 2))
+            consumed.add((zterm,sc,pr))
+      S2_z3_pairs.extend(new_reps)
+      S2_z3_pairs = [
+          triple for triple in S2_z3_pairs
+          if triple not in consumed
+      ]
+      new_reps = set()
+      # Unary rule: if perm ends with 'R' or 'W', normalize to (scope, '1')
+      for zterm, sc, pr in S_z3_pairs:
+        if pr.endswith('R') or pr.endswith('W'):
+            print(f"Unary rule applied: Term with perm '{pr}' is rewritten to (scope='{sc}', perm='1')")
+            print(f"consuming {sc},{pr}")
+            rep = mkImpactPair(StringVal(sc), IntVal(1))
+            constraints.append((zterm,rep))
+            new_reps.add((rep, sc, 1))
+            consumed.add((zterm,sc,pr))
+      S2_z3_pairs.extend(new_reps)
+      S2_z3_pairs = [
+          triple for triple in S2_z3_pairs
+          if triple not in consumed
+      ]
+      new_reps = set()
+      # Unary rule: if perm ends with 'A', drop 
+      for zterm, sc, pr in S_z3_pairs:
+        if pr.endswith('A'):
+            print(f"Unary rule applied: dropping term with perm '{pr}'")
+            print(f"consuming {sc},{pr}")
+            consumed.add((zterm,sc,pr))
+      new_reps = set()
+      #for p in S_z3_pairs:
+      #  print("...",p)
+      formula=True
+      for (_,sc,im) in S2_z3_pairs:
+        formula=And(formula,im>0)
+      solver.add(formula)
+      print("\nSolver constraints before solving:")
+      for sa in solver.assertions():
+        print(sa)
+        print()
+      if solver.check() == sat:
+        print("sat")
+        m = solver.model()
+        parts = {}
+        for zterm, sc, pr in S2_z3_pairs:
+          nf = m.evaluate(NFI(zterm), model_completion=True)
+          parts.setdefault(str(pr), []).append((sc, pr))
+        print("Partition:")
+        for rep, elems in parts.items():
+          print(f"  {rep} → {elems}")
+          print()
+      else:
+        print("unsat")
 else:
     print("UNSAT")
