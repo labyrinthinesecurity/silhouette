@@ -495,7 +495,7 @@ def generate_WAR_norms(single,combined):
   roles2=sorted(roles2)
   for pid in roles2:
     s+=1
-#    if s>300:
+#    if s>100:
 #      break
     if s%10==1:
       print(f"{s}/{t}")
@@ -563,7 +563,7 @@ def generate_WAR_norms(single,combined):
   c=-1
   for role in bulk:
     c+=1
-#    if c>500:
+#    if c>200:
 #      break
     if args.verbose:
       print("  handling",role['pid'])
@@ -823,14 +823,54 @@ def generate_WAR_norms(single,combined):
     calculate_WAR(spn[s],spn[s]['minW'],spn[s]['minA'],spn[s]['minR'])
     pairs=None
     permiplets=None
+    infimum=None
+    infimum_h=''
+    infimum_p=None
+    blast_radii={}
+    permiplets={}
     if spn[s]['dataActions']:
-      permiplets = group_permiplets_by_action_scope(hierarchy,spn[s]['dataActions_dict'], collapsed=False)
-      blast_radius,pairs=process_pairs(hierarchy,permiplets)
+      for shunt in shunts:
+        permiplets[shunt] = group_permiplets_by_action_scope(hierarchy,spn[s]['dataActions_dict'], collapsed=False)
+        ps = list(permiplets[shunt])
+        if len(ps) == 1:
+          scope, depth, impact = ps[0]
+          blast_radii[shunt] = float(impact) / (2 ** (2 * float(depth) + 1))
+          if args.verbose:
+            print("  (no pairs found)")
+            print("  blast radius:",blast_radii[shunt])
+        else:
+          blast_radii[shunt],pairs=process_pairs(shunts[shunt],permiplets[shunt])
+          if args.verbose:
+            print("  maximum pair:")
+          found=False
+          lca=None
+          lca_depth=None
+          for p in pairs:
+            if p['distance']==blast_radii[shunt]:
+              if args.verbose:
+                print("  P1>",p['p1'][0])
+              if 'p2' in p:
+                if args.verbose:
+                  print("  P2>",p['p2'][0])
+                _,lca_depth = least_common_ancestor(shunts[shunt], p['p1'][0], p['p2'][0], collapsed=False, verbose =True)
+              found=True
+              break
+          if args.verbose:
+            print("  blast radius:",blast_radii[shunt])
+      infimum=2.0
+      for br in blast_radii:
+        if blast_radii[br]<infimum:
+          infimum=blast_radii[br]
+          infimum_h=br
+          infimum_p=permiplets[br]
+    if args.verbose:
+      print("infimum blast radius:",infimum,"in",infimum_h,"hierarchy for ",s)
+      print()
     else:
-      blast_radius=None
+      infimum=None
     if args.verbose and single==False:
-      print(f"  blast radius of {s}: {blast_radius}")
-    spn[s]['blast_radius']=blast_radius
+      print(f"  blast radius of {s}: {infimum}")
+    spn[s]['blast_radius']=infimum
     if spn[s]['WAR']<1 and spn[s]['A'] == False and spn[s]['D'] == False and spn[s]['dataActions'] == False:
       if args.verbose:
         print("DELETING",s,"because it has no Azure perms")
@@ -885,7 +925,7 @@ def generate_WAR_norms(single,combined):
     print("")
     print("  Azure Data Plane> blast radius:",spn[s]['blast_radius'])
     if args.verbose and spn[s]['dataActions']:
-      ps = list(permiplets)
+      ps = list(infimum_p)
       if len(ps) == 1:
         scope, depth, impact = ps[0]
         print("  Azure Data Plane> no pairs found")
@@ -894,7 +934,7 @@ def generate_WAR_norms(single,combined):
         lca=None
         lca_depth=None
         for p in pairs:
-          if p['distance']==blast_radius:
+          if p['distance']==spn[s]['blast_radius']:
             print("  Azure Data Plane> maximum pair: ",p['p1'][0],p['p2'][0])
 #            if 'p2' in p:
 #              print("    ",p['p2'][0])
@@ -1001,10 +1041,9 @@ if args.single and args.live==False:
     with open('gperms.json','r') as file:
       gperms=json.load(file)
   if os.path.exists('management_hierarchy.csv'):
-    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+    pass
   else:
     save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
-    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   combined=fetch_combined(args.single)
 elif args.live == False:
   if os.path.exists('groups_roles.json'):
@@ -1017,10 +1056,9 @@ elif args.live == False:
     with open('gperms.json','r') as file:
       gperms=json.load(file)
   if os.path.exists('management_hierarchy.csv'):
-    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
+    pass
   else:
     save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
-    hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
   if os.path.exists('ARG.json'):
     with open('ARG.json','r') as file:
       combined=json.load(file)
@@ -1029,7 +1067,6 @@ elif args.live == False:
 else:
   save_hierarchy_to_csv(tenant_id,"management_hierarchy.csv")
   combined=fetch_combined(args.single)
-  hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
 
 hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
 shunts = {}
