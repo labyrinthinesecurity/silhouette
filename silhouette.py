@@ -830,6 +830,7 @@ def generate_WAR_norms(single,combined):
     permiplets={}
     if spn[s]['dataActions']:
       for shunt in shunts:
+        print("EXAMINING HIERARCHY",shunt)
         permiplets[shunt] = group_permiplets_by_action_scope(hierarchy,spn[s]['dataActions_dict'], collapsed=False)
         ps = list(permiplets[shunt])
         if len(ps) == 1:
@@ -858,12 +859,15 @@ def generate_WAR_norms(single,combined):
           if args.verbose:
             print("  blast radius:",blast_radii[shunt])
       infimum=2.0
+      print("blast radii:")
+      print(blast_radii)
       for br in blast_radii:
+        print("  BR",br)
         if blast_radii[br]<infimum:
           infimum=blast_radii[br]
           infimum_h=br
           infimum_p=permiplets[br]
-    if args.verbose:
+    if args.verbose and infimum is not None:
       print("infimum blast radius:",infimum,"in",infimum_h,"hierarchy for ",s)
       print()
     else:

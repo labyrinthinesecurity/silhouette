@@ -377,63 +377,13 @@ def load_roles(collapsed=False):
         role_dict[pid]=da_dict
     return role_dict
 
-def save_blast_radii(shunts,verbose=False):
-  rows=[]
-  role_dict=load_roles()
-  for pid in role_dict.keys():
-    blast_radii={}
-    if verbose:
-      print("BLAST RADIUS of ",pid)
-    for shunt in shunts: 
-      if verbose:
-        print("  HIERARCHY:",shunt)
-      permiplets = group_permiplets_by_action_scope(shunts[shunt],role_dict[pid], collapsed=False)
-      ps = list(permiplets)
-      if len(ps) == 1:
-        scope, depth, impact = ps[0]
-        blast_radii[shunt] = float(impact) / (2 ** (2 * float(depth) + 1))
-        if verbose:
-          print("  (no pairs found)")
-          print("  blast radius:",blast_radii[shunt])
-      else:
-        blast_radii[shunt],pairs=process_pairs(shunts[shunt],permiplets)
-        if verbose:
-          print("  maximum pair:")
-        found=False
-        lca=None
-        lca_depth=None
-        for p in pairs:
-          if p['distance']==blast_radii[shunt]:
-            if verbose:
-              print("  P1>",p['p1'][0])
-            if 'p2' in p:
-              if verbose:
-                print("  P2>",p['p2'][0])
-              _,lca_depth = least_common_ancestor(shunts[shunt], p['p1'][0], p['p2'][0], collapsed=False, verbose =True)
-            found=True
-            break
-        if verbose:
-          print("  blast radius:",blast_radii[shunt])
-      infimum=2.0
-      infimum_h=''
-    for br in blast_radii:
-      if blast_radii[br]<infimum:
-        infimum=blast_radii[br]
-        infimum_h=br
-    if verbose:
-      print("infimum blast radius:",infimum,"in",infimum_h,"hierarchy for ",pid)
-      print()
-    rows.append({"pid": pid, "blast_radius": infimum})
-  result_df = pd.DataFrame(rows)
-  result_df['blast_radius'] = pd.to_numeric(result_df['blast_radius'], errors='coerce')
-  result_df = result_df.sort_values(by="blast_radius", ascending=False, na_position="last")
-  result_df.to_csv("sorted_blast.csv", index=False)
-
 def explain(shunts,pid):
   role_dict=load_roles()
   blast_radii={}
+  max_pairs={}
   for shunt in shunts:
     print("HIERARCHY:",shunt)
+    max_pairs[shunt]=[]
     permiplets = group_permiplets_by_action_scope(shunts[shunt],role_dict[pid], collapsed=False)
     ps = list(permiplets)
     if len(ps) == 1:
@@ -444,17 +394,14 @@ def explain(shunts,pid):
     else:
       blast_radii[shunt],pairs=process_pairs(shunts[shunt],permiplets)
       print("  maximum pair:")
-      found=False
       lca=None
       lca_depth=None
       for p in pairs:
         if p['distance']==blast_radii[shunt]:
           print("  P1>",p['p1'][0])
-          if 'p2' in p:
-            print("  P2>",p['p2'][0])
-            _,lca_depth = least_common_ancestor(shunts[shunt], p['p1'][0], p['p2'][0], collapsed=False, verbose =True)
-          found=True
-          break
+          print("  P2>",p['p2'][0])
+          _,lca_depth = least_common_ancestor(shunts[shunt], p['p1'][0], p['p2'][0], collapsed=False, verbose =True)
+          max_pairs[shunt].append(p)
       print("  blast radius:",blast_radii[shunt])
     infimum=2.0
     infimum_h=''
@@ -464,6 +411,10 @@ def explain(shunts,pid):
       infimum_h=br
   print("infimum blast radius:",infimum,"in",infimum_h,"hierarchy")
   print()
+  for mx in max_pairs:
+    print(mx)
+    for p in max_pairs[mx]:
+      print("  ",p)
 
 def plot_crossplane0(input_path):
     """

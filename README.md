@@ -134,11 +134,34 @@ Here are a few examples of silhouette configurations based on the WAR norm table
 </div>
 
 ### Data plane scores
-The blast radius measures lateral motion across your data plane. In anticipation of a SPN compromission, you know the maximum extent of data breach and/or a data exfiltration.
+The blast radius leverages the native clustering hierarchy of resources management in Azure to compute an ultrametric distance between any two pairs of resources a SPN is assigned dataActions.
+The ultrametric maximum represents the largest lateral motion a SPN can perform across your data plane, hence its name: blast radius. This is useful to assess the extent of potential data leakages or data forgeries.
 
 <div align="center">
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius.png" width="70%">
 </div>
+
+#### Example
+
+Consider the resources depicted in green in the image below: these are a storage account and a cosmosDB instance.
+
+<div align="center">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius_example.png" width="50%">
+</div>
+
+Their Least Common Ancestor (LCA) in Azure's Tenant hierarchy is the Tenant itself. The ultrametric distance between two points is 1/(2^LCA), so
+ their distance is 1/2^0 = 1.0
+
+#### Calculation details
+Silhouette performs a more advanced calculation: in fact, depending on the dataAction, the blast radius is modified by a factor called the impact: 
+a SPN with '*' data action or with both 'Read' and 'Write' data actions has an impact of 2, whereas a SPN with either a 'Read' or a 'Write' data action (but not both) has an impact of 1. If the data action is 'Action', then the impact is 0, meaning Actions are basically ignored.
+
+#### Blast radius computation option
+By default, the blast radius only relies on Azure's native Tenant hierarchy. But you may want to design alternate hierarchy which better reflect the organization of your Coporation. This can be useful is some management group is undergoing a migration, following a reorganization, a merger, a carve-out, etc.
+
+Each alernate hierarchy must be described in a "shunt" file, called shunt_{hierarchy_name}.csv
+
+To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv and run silhouette with your usual options
 
 ## Additional resources and documentation
 - Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)
