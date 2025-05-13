@@ -154,7 +154,18 @@ Their Least Common Ancestor (LCA) in Azure's Tenant hierarchy is the Tenant itse
 
 #### Calculation details
 Silhouette performs a more advanced calculation: in fact, depending on the dataAction, the blast radius is modified by a factor called the impact: 
-a SPN with '*' data action or with both 'Read' and 'Write' data actions has an impact of 2, whereas a SPN with either a 'Read' or a 'Write' data action (but not both) has an impact of 1. If the data action is 'Action', then the impact is 0, meaning Actions are basically ignored.
+
+a SPN with '*' data action or with both 'Read' and 'Write' data actions has an impact of 2, whereas a SPN with either a 'Read' or a 'Write' data action (but not both) has an impact of 1. 
+
+If the data action is 'Action', then the impact is 0, meaning Actions are basically ignored.
+
+So, to cater for this impact factor, the actual ultrametric is: impact/(2^(2*LCA+1))
+
+If Impact=2, then we measure a distance of 2/(2^(2*LCA+1))=1/(2^(2*LCA)). If impact=1, then the measurement is 1/(2^(2*LCA+1))
+
+Therefore we make sure that, for any given pair of data actions, their distance falls within interval [ 1/(2^(2*LCA+1)), 1/(2^(2*LCA)) ] which is not overlapping with LCA+1 and LCA-1. The full ordering of pairs is preserved!
+
+Check my paper for full details: [arxiv paper](https://arxiv.org/abs/2504.13747)
 
 #### Blast radius computation option
 By default, the blast radius only relies on Azure's native Tenant hierarchy. But you may want to design alternate hierarchy which better reflect the organization of your Coporation. This can be useful is some management group is undergoing a migration, following a reorganization, a merger, a carve-out, etc.
