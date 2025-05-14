@@ -149,30 +149,34 @@ Consider the resources depicted in green in the image below: these are a storage
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius_example.png" width="50%">
 </div>
 
-Their Least Common Ancestor (LCA) in Azure's Tenant hierarchy is the Tenant itself. The ultrametric distance between two points is 1/(2^LCA), so
- their distance is 1/2^0 = 1.0
+Their Least Common Ancestor (LCA) in Azure's Tenant hierarchy is the Tenant itself. The "raw" ultrametric distance between two points is 1/(2^LCA), so their distance is 1/2^0 = 1.0
+
+A distance of 1.0 is maximal, corresponding to a Tenant-wide lateral motion
 
 #### Calculation details
-Silhouette performs a more advanced calculation: in fact, depending on the dataAction, the blast radius is modified by a factor called the impact: 
+Under the hood, Silhouette performs a more advanced calculation: depending on the dataAction, the "raw" ultrametric distance is modified by a factor called the impact: 
 
-a SPN with '*' data action or with both 'Read' and 'Write' data actions has an impact of 2, whereas a SPN with either a 'Read' or a 'Write' data action (but not both) has an impact of 1. 
+- a SPN with '*' data action or with both 'Read' and 'Write' data actions has an impact of 2
+- a SPN with either a 'Read' or a 'Write' data action (but not both) has an impact of 1. 
+- if the data action is 'Action', then the impact is 0, meaning Actions are basically ignored.
 
-If the data action is 'Action', then the impact is 0, meaning Actions are basically ignored.
 
-So, to cater for this impact factor, the actual ultrametric is: impact/(2^(2*LCA+1))
+To cater for this impact factor, the actual ultrametric is: impact/(2^(2*LCA+1))
 
-If Impact=2, then we measure a distance of 2/(2^(2*LCA+1))=1/(2^(2*LCA)). If impact=1, then the measurement is 1/(2^(2*LCA+1))
+- if Impact=2, then we measure a distance of 2/(2^(2*LCA+1))=1/(2^(2*LCA)). 
+- if impact=1, then the measurement is 1/(2^(2*LCA+1))
 
 Therefore we make sure that, for any given pair of data actions, their distance falls within interval [ 1/(2^(2*LCA+1)), 1/(2^(2*LCA)) ] which is not overlapping with LCA+1 and LCA-1. The full ordering of pairs is preserved!
 
-Check my paper for full details: [arxiv paper](https://arxiv.org/abs/2504.13747)
+Check my preprint paper for full details: [arxiv paper](https://arxiv.org/abs/2504.13747)
 
 #### Blast radius computation option
-By default, the blast radius only relies on Azure's native Tenant hierarchy. But you may want to design alternate hierarchy which better reflect the organization of your Coporation. This can be useful is some management group is undergoing a migration, following a reorganization, a merger, a carve-out, etc.
+By default, the blast radius only relies on Azure's native Tenant hierarchy. But you may want to design alternate hierarchies which better reflect the organization of your Coporation and to get "tighter" blast radii. 
+This can be useful is some management group is undergoing a migration, following a reorganization, a merger, a carve-out, etc.
 
-Each alernate hierarchy must be described in a "shunt" file, called shunt_{hierarchy_name}.csv
+Each alternate hierarchy must be described in a "shunt" file, called shunt_{hierarchy_name}.csv
 
-To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv and run silhouette with your usual options
+To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv, add or modify a child/parent relationship and run silhouette with your usual options
 
 ## Additional resources and documentation
 - Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)

@@ -1028,8 +1028,8 @@ def scores2csv(data):
 
 if args.version:
   print("Azure Silhouette, a NHI sorter and minimizer")
-  print("  Version 2.1, by Christophe Parisel (labyrinthinesecurity)")
-  print("  Licensed under LGPL, use at your own risks")
+  print("  Version 2.1 (Ultrametry edition), by Christophe Parisel (labyrinthinesecurity)")
+  print("  Licensed under LGPL, use at your own risks!")
   print("  https://github.com/labyrinthinesecurity/silhouette")
   sys.exit()
 
