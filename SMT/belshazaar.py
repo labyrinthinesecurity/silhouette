@@ -41,15 +41,12 @@ perm = Pair.perm
 
 any_char = Range('\x00', '\x7F')
 
-# Build the Z3 constants for them
+# Build the Z3 constants for S_list pairs
 S0 = [ mkPair(StringVal(s), StringVal(p)) for s,p in S_list ]
 
 U_seen = set()
 nf = Const("nf", Pair)
-
 x = Const("x", Pair)
-x1 = Const("x1", Pair)
-x2 = Const("x2", Pair)
 
 unary_rules = Or(
         And(SuffixOf(StringVal("/read"), perm(x)),
@@ -64,13 +61,12 @@ unary_rules = Or(
             nf == mkPair(scope(x), StringVal("A")))
 )
 
-
-
+# First TRS saturation engine
 while True:
     solver = Solver()
     #solver.set("timeout", 50000)
 
-    # Let x, x1, x2 come from the input set
+    # Let x come from the input set
     solver.add(Or([x == t for t in S0]))
     solver.add(unary_rules)
 
@@ -83,26 +79,37 @@ while True:
     v = m.eval(nf, model_completion=True)
     u = (m.eval(scope(v)).as_string(), m.eval(perm(v)).as_string())
     U_seen.add(u)
+
 # now U_seen holds all unary normal forms
 print("Unary NFs:", U_seen)
 
-# ── 2) Build new input for binary TRS ──
+# Build the Z3 constants for U_seen pairs
 S1 = [ mkPair(StringVal(s), StringVal(p)) for (s,p) in U_seen ]
 
-# ── 3) Binary saturation ──
+# Binary saturation
 B_seen = set()
 B_phi  = BoolVal(True)
 x1 = Const("x1", Pair)
 x2 = Const("x2", Pair)
 
-# === Binary rules ===
-binary_rules = And(
+# Binary rules
+binary_rules = Or(
+    And(
     scope(x1) == scope(x2),
     Or(
             And(perm(x1) == StringVal("R"), perm(x2) == StringVal("W")),
             And(perm(x1) == StringVal("W"), perm(x2) == StringVal("R"))
         ),
         nf == mkPair(scope(x1), StringVal("S"))
+    ),
+    And(
+    scope(x1) == scope(x2),
+    Or(
+            And(perm(x1) == StringVal("R"), perm(x2) == StringVal("S")),
+            And(perm(x1) == StringVal("S"), perm(x2) == StringVal("R"))
+        ),
+        nf != mkPair(scope(x1), StringVal("R"))
+    )
 )
 
 while True:
@@ -122,30 +129,32 @@ while True:
     B_seen.add(b)
 print("Binary NFs:", B_seen)
 
-# ── 4) Equivalence classes ──
-#  map each original term in S0 to its (u_nf, then b_nf)
-classes = defaultdict(list)
-for t0 in S0:
-    # find its unary NF u
-    for u in U_seen:
-        # check if t0 rewrites to u
-        s = Solver(); 
-        s.add(x == t0, nf == mkPair(StringVal(u[0]), StringVal(u[1])))
-        s.add(unary_rules)
-        if s.check() == sat:
-            # now find its binary NF b (or identity)
-            t1 = mkPair(StringVal(u[0]), StringVal(u[1]))
-            b_nf = u
-            for b in B_seen:
-                s2 = Solver()
-                s2.add(x1 == t1, x2 == t1,binary_rules)
-                if s2.check() == sat:
-                    b_nf = b
-                    break
-            classes[b_nf].append((m.eval(scope(t0)).as_string(),
-                                   m.eval(perm(t0)).as_string()))
-            break
+# Track terms that reduce to a binary NF
+B_nf_to_terms = defaultdict(set)
 
-print("\nEquivalence classes after chaining:")
-for rep, members in classes.items():
-    print(f"  {rep} -> {members}")
+for (scope_b, perm_b) in B_seen:
+    target_nf = mkPair(StringVal(scope_b), StringVal(perm_b))
+    for (s0, p0) in U_seen:
+        t0 = mkPair(StringVal(s0), StringVal(p0))
+        check_solver = Solver()
+        x1_check = Const("x1", Pair)
+        x2_check = Const("x2", Pair)
+        nf_check = Const("nf", Pair)
+
+        check_solver.add(x1_check == t0)
+        check_solver.add(Or([x2_check == t for t in S1]))  # Second pair from S1
+        check_solver.add(scope(x1_check) == scope(x2_check))
+        check_solver.add(Or(
+            And(perm(x1_check) == StringVal("R"), perm(x2_check) == StringVal("W")),
+            And(perm(x1_check) == StringVal("W"), perm(x2_check) == StringVal("R"))
+        ))
+        check_solver.add(nf_check == mkPair(scope(x1_check), StringVal("S")))
+        check_solver.add(nf_check == target_nf)
+
+        if check_solver.check() == sat:
+            B_nf_to_terms[(scope_b, perm_b)].add((s0, p0))
+
+print("\nEquivalence classes from binary TRS:")
+for nf_key, terms in B_nf_to_terms.items():
+    print(f"  {nf_key} ← {sorted(terms)}")
+
