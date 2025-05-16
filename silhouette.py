@@ -870,9 +870,7 @@ def generate_WAR_norms(single,combined):
     if args.verbose and infimum is not None:
       print("infimum blast radius:",infimum,"in",infimum_h,"hierarchy for ",s)
       print()
-    else:
-      infimum=None
-    if args.verbose and single==False:
+    if args.verbose and single==False and infimum is not None:
       print(f"  blast radius of {s}: {infimum}")
     spn[s]['blast_radius']=infimum
     if spn[s]['WAR']<1 and spn[s]['A'] == False and spn[s]['D'] == False and spn[s]['dataActions'] == False:
@@ -1032,7 +1030,6 @@ if args.version:
   print("  Licensed under LGPL, use at your own risks!")
   print("  https://github.com/labyrinthinesecurity/silhouette")
   sys.exit()
-
 
 if args.single and args.live==False:
   if os.path.exists('groups_roles.json'):

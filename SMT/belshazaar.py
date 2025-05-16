@@ -65,7 +65,7 @@ perm = Pair.perm
 any_char = Range('\x00', '\x7F')
 
 # Build the Z3 constants for S_list pairs
-TRS2_pairs = [ mkPair(StringVal(s), StringVal(p)) for s,p in S_list ]
+TRS1_pairs = [ mkPair(StringVal(s), StringVal(p)) for s,p in S_list ]
 
 TRS1_seen = set()
 nf = Const("nf", Pair)
@@ -91,7 +91,7 @@ while True:
     #solver.set("timeout", 50000)
 
     # Let x come from the input set
-    solver.add(Or([x == t for t in TRS2_pairs]))
+    solver.add(Or([x == t for t in TRS1_pairs]))
     solver.add(TRS1_rules)
 
     # block already seen TRS1 NFs
@@ -104,7 +104,7 @@ while True:
     u = (m.eval(scope(v)).as_string(), m.eval(perm(v)).as_string())
     TRS1_seen.add(u)
     # Track all original terms that rewrite to this NF u
-    for t in TRS2_pairs:
+    for t in TRS1_pairs:
       s_check = Solver()
       s_check.add(x == t)
       s_check.add(TRS1_rules)
@@ -118,6 +118,33 @@ while True:
 # now TRS1_seen holds all TRS1 normal forms
 if args.show:
   print("TRS1 NFs:", TRS1_seen)
+
+
+chk = Solver()
+
+# Convert each (scope, perm) tuple into Z3 pairs
+check_TRS1_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s, p) in TRS1_seen ]
+
+# x must be one of the unary NF terms
+chk.add(Or([x == t for t in check_TRS1_pairs]))
+
+# Add a constraint: perm(x) is not in {'R', 'S', 'W', 'A'}
+chk.add(
+    And(
+        perm(x) != StringVal("R"),
+        perm(x) != StringVal("S"),
+        perm(x) != StringVal("W"),
+        perm(x) != StringVal("A"),
+    )
+)
+
+# Check
+if chk.check() == sat:
+    bad = chk.model()[x]
+    print("❌ Found invalid NF perm:", bad, "→", chk.model().eval(perm(x)))
+    sys.exit()
+else:
+    print("✅ All unary NFs have perm ∈ {R,S,W,A}")
 
 # Build the Z3 constants for TRS1_seen pairs
 TRS2_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s,p) in TRS1_seen ]
@@ -214,10 +241,37 @@ for nf, terms in dict(TRS2_nf_to_terms):
         final_equiv_classes[jnf] = str(terms)
 
 # 2) add TRS1 NFs that did not participate in any TRS2 rule
-for nf, terms in TRS1_nf_to_terms.items():
+for nf, terms in dict(TRS1_nf_to_terms):
     jnf = json.dumps(nf)
     if jnf not in final_equiv_classes:
         final_equiv_classes[jnf] = str(terms)
+
+chk = Solver()
+
+# Convert each (scope, perm) tuple into Z3 pairs
+check_TRS2_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s, p) in TRS2_seen ]
+
+# x must be one of the unary NF terms
+chk.add(Or([x == t for t in check_TRS2_pairs]))
+
+# Add a constraint: perm(x) is not in {'R', 'S', 'W', 'A'}
+chk.add(
+    And(
+        perm(x) != StringVal("R"),
+        perm(x) != StringVal("W"),
+        perm(x) != StringVal("S")
+    )
+)
+
+# Check
+if chk.check() == sat:
+    bad = chk.model()[x]
+    print("❌ Found invalid NF perm:", bad, "→", chk.model().eval(perm(x)))
+    sys.exit()
+else:
+    print("✅ All unary NFs have perm ∈ {R,S,W}")
+
+
 if args.show:
   print("\n=== Final Equivalence Classes ===")
   for nf, terms in final_equiv_classes.items():
