@@ -29,17 +29,8 @@ if 'dataActions' not in spn[args.pid]:
   print("INFO. This SPN has no data actions")
   sys.exit()
 
-if spn[args.pid]['dataActions']:
-  for scope in spn[args.pid]['dataActions_dict']:
-    for perm in spn[args.pid]['dataActions_dict'][scope]:
-      matches = re.findall(r'/[\w\d.-]+', perm)
-      condensed_perm = matches[-1] if matches else perm
-      if matches:
-        S_list.append((scope,condensed_perm))
-      else:
-        S_list.append((scope,perm))
-
 '''
+S_list=[]
 S_list.append(("ab","Something/*/read"))
 S_list.append(("ab","Something/*/write"))
 S_list.append(("c","Something/*/read"))
@@ -54,229 +45,116 @@ if args.verbose:
 
 random.shuffle(S_list)
 
-# Declare pair sort
-Pair = Datatype('Pair')
-Pair.declare('mkPair', ('scope', StringSort()), ('perm', StringSort()))
-Pair = Pair.create()
-mkPair = Pair.mkPair
-scope = Pair.scope
-perm = Pair.perm
+# ───────────────────────────────────────────────────────────
+# 1) Define your input data-actions (scope, perm) pairs.
+#    Replace this list with your actual dataActions.
+S_list = [
+    ('a', 'Something/*/read'),
+    ('a', '/write'),
+    ('b', '/read*'),
+    ('c', '/delete'),
+    ('c', '*/action'),
+    ('d', 'misc'),
+    ('e', 'resource.provider1/something/write'),
+    ('e', 'resource.provider2/somethingelse/delete'),
+    ('f', 'rp.0001/*'),
+    ('g', '*'),
+    ('g', '/read')
+]
 
-any_char = Range('\x00', '\x7F')
+# ───────────────────────────────────────────────────────────────
+# Rewrite rules
 
-# Build the Z3 constants for S_list pairs
-TRS1_pairs = [ mkPair(StringVal(s), StringVal(p)) for s,p in S_list ]
+def unary_nf(scope, perm):
+    """Unary rewrite: normalize permissions based on suffix."""
+    if perm.endswith('/read'):
+        return scope, 'R'
+    if perm.endswith('/write') or perm.endswith('/delete'):
+        return scope, 'W'
+    if perm.endswith('/action') or perm.endswith('*'):
+        return scope, 'S'
+    return scope, perm  # unchanged
 
-TRS1_seen = set()
-nf = Const("nf", Pair)
-x = Const("x", Pair)
-TRS1_nf_to_terms = defaultdict(set)
+def binary_nf(p1, p2):
+    """Binary rewrite rules, including absorption."""
+    (s1, t1), (s2, t2) = p1, p2
 
-TRS1_rules = Or(
-        And(SuffixOf(StringVal("/read"), perm(x)),
-            nf == mkPair(scope(x), StringVal("R"))),
-        And(SuffixOf(StringVal("/write"), perm(x)),
-            nf == mkPair(scope(x), StringVal("W"))),
-        And(SuffixOf(StringVal("*"), perm(x)),
-            nf == mkPair(scope(x), StringVal("S"))),
-        And(SuffixOf(StringVal("/delete"), perm(x)),
-            nf == mkPair(scope(x), StringVal("W"))),
-        And(SuffixOf(StringVal("/action"), perm(x)),
-            nf == mkPair(scope(x), StringVal("A")))
-)
+    if s1 == s2:
+        # R + W → S
+        if {t1, t2} == {'R', 'W'}:
+            return (s1, 'S'), (s2, 'S')
+        # Absorption: S + R/W → S + ⊥ (means: absorb the R/W)
+        if t1 == 'S' and t2 in {'R', 'W'}:
+            return (s1, 'S'), None
+        if t2 == 'S' and t1 in {'R', 'W'}:
+            return None, (s2, 'S')
 
-# First TRS saturation engine
-while True:
-    solver = Solver()
-    #solver.set("timeout", 50000)
+    return None  # no rule fired
 
-    # Let x come from the input set
-    solver.add(Or([x == t for t in TRS1_pairs]))
-    solver.add(TRS1_rules)
+# ───────────────────────────────────────────────────────────────
+# Saturation loop
 
-    # block already seen TRS1 NFs
-    for (s_u,p_u) in TRS1_seen:
-        solver.add(nf != mkPair(StringVal(s_u), StringVal(p_u)))
-    if solver.check() != sat:
-        break
-    m = solver.model()
-    v = m.eval(nf, model_completion=True)
-    u = (m.eval(scope(v)).as_string(), m.eval(perm(v)).as_string())
-    TRS1_seen.add(u)
-    # Track all original terms that rewrite to this NF u
-    for t in TRS1_pairs:
-      s_check = Solver()
-      s_check.add(x == t)
-      s_check.add(TRS1_rules)
-      s_check.add(nf == mkPair(StringVal(u[0]), StringVal(u[1])))
-      if s_check.check() == sat:
-        scope_t = m.eval(scope(t)).as_string()
-        perm_t = m.eval(perm(t)).as_string()
-        TRS1_nf_to_terms[u].add((scope_t, perm_t))
-
-
-# now TRS1_seen holds all TRS1 normal forms
-if args.show:
-  print("TRS1 NFs:", TRS1_seen)
-
-
-chk = Solver()
-
-# Convert each (scope, perm) tuple into Z3 pairs
-check_TRS1_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s, p) in TRS1_seen ]
-
-# x must be one of the unary NF terms
-chk.add(Or([x == t for t in check_TRS1_pairs]))
-
-# Add a constraint: perm(x) is not in {'R', 'S', 'W', 'A'}
-chk.add(
-    And(
-        perm(x) != StringVal("R"),
-        perm(x) != StringVal("S"),
-        perm(x) != StringVal("W"),
-        perm(x) != StringVal("A"),
-    )
-)
-
-# Check
-if chk.check() == sat:
-    bad = chk.model()[x]
-    print("❌ Found invalid NF perm:", bad, "→", chk.model().eval(perm(x)))
-    sys.exit()
-else:
-    print("✅ All unary NFs have perm ∈ {R,S,W,A}")
-
-# Build the Z3 constants for TRS1_seen pairs
-TRS2_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s,p) in TRS1_seen ]
-
-# TRS2 saturation
-TRS2_seen = set()
-x1 = Const("x1", Pair)
-x2 = Const("x2", Pair)
-
-# TRS2 rules
-TRS2_rules = Or(
-    And(
-    scope(x1) == scope(x2),
-    Or(
-            And(perm(x1) == StringVal("R"), perm(x2) == StringVal("W")),
-            And(perm(x1) == StringVal("W"), perm(x2) == StringVal("R"))
-        ),
-        nf == mkPair(scope(x1), StringVal("S"))
-    ),
-    And(
-    scope(x1) == scope(x2),
-    Or(
-            And(perm(x1) == StringVal("R"), perm(x2) == StringVal("S")),
-            And(perm(x1) == StringVal("S"), perm(x2) == StringVal("R"))
-        ),
-        nf != mkPair(scope(x1), StringVal("R"))
-    ),
-    And(
-    scope(x1) == scope(x2),
-    Or(
-            And(perm(x1) == StringVal("W"), perm(x2) == StringVal("S")),
-            And(perm(x1) == StringVal("S"), perm(x2) == StringVal("W"))
-        ),
-        nf != mkPair(scope(x1), StringVal("W"))
-    )
-)
+current = list(S_list)
 
 while True:
-    s = Solver()
-    # Let x1 and x2 range over all previously seen TRS1 NFs (TRS2_pairs),
-    # representing potential inputs to the binary rules
-    s.add(Or([x1 == t1 for t1 in TRS2_pairs]))
-    s.add(Or([x2 == t2 for t2 in TRS2_pairs]))
-    s.add(TRS2_rules)
-    # block seen TRS NFs
-    for (s_b,p_b) in TRS2_seen:
-        s.add(nf != mkPair(StringVal(s_b), StringVal(p_b)))
-    # If no more rewrites are found, saturation is complete
-    if s.check() != sat:
+    unary_ops = [
+        i for i, (s, p) in enumerate(current)
+        if unary_nf(s, p) != (s, p)
+    ]
+
+    binary_ops = []
+    for i in range(len(current)):
+        for j in range(i + 1, len(current)):
+            res = binary_nf(current[i], current[j])
+            if res is not None:
+                binary_ops.append((i, j))
+
+    if not unary_ops and not binary_ops:
         break
-    m = s.model()
-    v = m.eval(nf, model_completion=True)
-    b = (m.eval(scope(v)).as_string(), m.eval(perm(v)).as_string())
-    TRS2_seen.add(b)
 
-if args.show:
-  print("TRS2 NFs:", TRS2_seen)
+    if unary_ops and (not binary_ops or random.random() < 0.5):
+        i = random.choice(unary_ops)
+        current[i] = unary_nf(*current[i])
+    else:
+        i, j = random.choice(binary_ops)
+        r1, r2 = binary_nf(current[i], current[j])
+        # Apply rewrite, using None to mean “delete”
+        new_current = []
+        for k, item in enumerate(current):
+            if k == i and r1 is not None:
+                new_current.append(r1)
+            elif k == j and r2 is not None:
+                new_current.append(r2)
+            elif k != i and k != j:
+                new_current.append(item)
+        current = new_current
 
+# ───────────────────────────────────────────────────────────────
+# Partition result into equivalence classes
 
-# Track terms that reduce to a TRS2 NF
-TRS2_nf_to_terms = defaultdict(set)
+classes = defaultdict(list)
+for original in S_list:
+    # Find NF for original in current set
+    scope_o, _ = original
+    for scope_c, perm_c in current:
+        if scope_c == scope_o:
+            classes[(scope_c, perm_c)].append(original)
+            break
 
-# Loop: Which TRS1 normal forms are absorbed by TRS2 rules?
-# For each NF (normal form) found by TRS2
-for (scope_b, perm_b) in TRS2_seen:
-    # Construct the Z3 Pair constant for the target NF
-    target_nf = mkPair(StringVal(scope_b), StringVal(perm_b))
-    # Iterate through all NFs produced by TRS1
-    for (s0, p0) in TRS1_seen:
-        t0 = mkPair(StringVal(s0), StringVal(p0)) # Create a term to check if it collapses further via TRS2
-        # Set up a Z3 solver to check whether this TRS1 NF can reduce to the TRS2 NF
-        check_solver = Solver()
-        # Assign x1 to the TRS1 NF term being tested
-        check_solver.add(x1 == t0)
-        # Assign x2 to one of the TRS2 input pairs
-        check_solver.add(Or([x2 == t for t in TRS2_pairs]))  # Second pair from TRS2_pairs
-        check_solver.add(scope(x1) == scope(x2))
-        # Apply the TRS2 rules
-        check_solver.add(TRS2_rules)
-        # Resulting NF must match the currently tested TRS2 NF
-        check_solver.add(nf == mkPair(scope(x1), StringVal("S")))
-        check_solver.add(nf == target_nf)
+# ───────────────────────────────────────────────────────────────
+# Show results and anomalies
 
-        # If satisfiable, then the TRS1 NF rewrites further to this TRS2 NF
-        if check_solver.check() == sat:
-            TRS2_nf_to_terms[(scope_b, perm_b)].add((s0, p0))
+print("=== Final Equivalence Classes ===")
+for nf, members in classes.items():
+    print(f"NF {nf}: {members}")
 
-# Generate final equivalence classes
-final_equiv_classes=dict()
-# 1) TRS2-derived classes
-for nf, terms in dict(TRS2_nf_to_terms):
-    jnf = json.dumps(nf)
-    if jnf not in final_equiv_classes:
-        final_equiv_classes[jnf] = str(terms)
+allowed = {'S', 'R', 'W'}
+anomalies = {nf: ms for nf, ms in classes.items() if nf[1] not in allowed}
 
-# 2) add TRS1 NFs that did not participate in any TRS2 rule
-for nf, terms in dict(TRS1_nf_to_terms):
-    jnf = json.dumps(nf)
-    if jnf not in final_equiv_classes:
-        final_equiv_classes[jnf] = str(terms)
-
-chk = Solver()
-
-# Convert each (scope, perm) tuple into Z3 pairs
-check_TRS2_pairs = [ mkPair(StringVal(s), StringVal(p)) for (s, p) in TRS2_seen ]
-
-# x must be one of the unary NF terms
-chk.add(Or([x == t for t in check_TRS2_pairs]))
-
-# Add a constraint: perm(x) is not in {'R', 'S', 'W', 'A'}
-chk.add(
-    And(
-        perm(x) != StringVal("R"),
-        perm(x) != StringVal("W"),
-        perm(x) != StringVal("S")
-    )
-)
-
-# Check
-if chk.check() == sat:
-    bad = chk.model()[x]
-    print("❌ Found invalid NF perm:", bad, "→", chk.model().eval(perm(x)))
-    sys.exit()
+if anomalies:
+    print("\n=== Anomalies: non-SRW partitions ===")
+    for nf, group in anomalies.items():
+        print(f"NF {nf} ← {group}")
 else:
-    print("✅ All unary NFs have perm ∈ {R,S,W}")
+    print("\nAll normal forms are within {S, R, W}.")
 
-
-if args.show:
-  print("\n=== Final Equivalence Classes ===")
-  for nf, terms in final_equiv_classes.items():
-    print(f"NF: {nf} ← {terms}")
-
-if args.save:
-  with open(f"TRS_{args.pid}.json","w") as f:
-    json.dump(final_equiv_classes,f,indent=2)
