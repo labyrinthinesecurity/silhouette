@@ -20,6 +20,8 @@ Control Plane scores are generated with the help of a new norm called the *WAR n
 
 Data Plane scores are generated with the help of a new distance called the *blast radius*. It ranges from 0 (no data actions) to 1.0 (tenantwide lateral motion). The blast radius captures the maximum breadth of a data leakage or a data forgery.
 
+In the data plane, you may also calculate the *data perimeter* of your NHIs. It provides a high resolution contour of your SPN's data action, complementing the blast radius nicely in advanced prioritization scenarios.
+
 <div align="center">
 <img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/rbac_distance.jpeg" width="50%">
 </div>
@@ -163,12 +165,12 @@ Under the hood, Silhouette performs a more advanced calculation: depending on th
 
 To cater for this impact factor, the actual ultrametric is: impact/(2^(2*LCA+1))
 
-- if Impact=2, then we measure a distance of 2/(2^(2*LCA+1))=1/(2^(2*LCA)). 
+- if impact=2, then we measure a distance of 2/(2^(2*LCA+1))=1/(2^(2*LCA)). 
 - if impact=1, then the measurement is 1/(2^(2*LCA+1))
 
 Therefore we make sure that, for any given pair of data actions, their distance falls within interval [ 1/(2^(2*LCA+1)), 1/(2^(2*LCA)) ] which is not overlapping with LCA+1 and LCA-1. The full ordering of pairs is preserved!
 
-Check my preprint paper for full details: [arxiv paper](https://arxiv.org/abs/2504.13747)
+Check my Blast Radius preprint for full details: [arxiv Blast Radius](https://arxiv.org/abs/2504.13747)
 
 #### Blast radius computation option
 By default, the blast radius only relies on Azure's native Tenant hierarchy. But you may want to design alternate hierarchies which better reflect the organization of your Coporation and to get "tighter" blast radii. 
@@ -178,6 +180,13 @@ Each alternate hierarchy must be described in a "shunt" file, called shunt_{hier
 
 To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv, add or modify a child/parent relationship and run silhouette with your usual options
 
-## Additional resources and documentation
-- Theory of IAM de-escalation in Azure and how the WAR norm is built: [PDF article](https://github.com/labyrinthinesecurity/silhouette/blob/2.0/silhouette.pdf)
-- Scoring Azure permissions with distance metrics: [arxiv paper](https://arxiv.org/abs/2504.13747)
+### Data perimeter
+Once you have run silhouette successfully across your Tenant, you may calculate the data perimeter of all your SPNs using the *dataPerimeter.py* script. It will dump a CSV containing the pid of each SPN, their blast radius, the count of data actions, the data perimeter and the mean ultrametric distance between data actions.
+
+```
+pid;blast_radius;data_actions;data_perimeter;mean
+b17efda0-13fa-47d7-9272-4ecef0381547;0.000244140625;13;0.0005035400390625;0.0001678466796875
+e8878def-d88d-4e1f-b44c-886452a6d45b;0.0625;7;0.12514540553092957;0.009043391793966293
+```
+
+Check my data perimeter preprint for full details: [arxiv Data Perimeter](https://arxiv.org/abs/2505.13238)
