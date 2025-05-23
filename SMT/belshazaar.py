@@ -6,27 +6,16 @@ from collections import defaultdict
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--pid', required=True, type=str, help='verify dataAction structure of a principal')
 parser.add_argument('--save', action="store_true", required=False, help='saves proof to file')
 parser.add_argument('--show', action="store_true", required=False, help='displays proof to screen')
 parser.add_argument('--verbose', action="store_true", required=False, help='prints debugging info to stdout')
 args = parser.parse_args()
 
-if os.path.exists('spnperms.json'):
-  with open('spnperms.json','r') as file:
-    spn=json.load(file)
+if os.path.exists('dataActions.txt'):
+  with open('dataActions.txt', 'r') as file:
+    S_list = [('a',line.strip()) for line in file if line.strip()]
 else:
-  print("ERROR. Run silhouette first")
-  sys.exit()
-
-S_list=[]
-
-if args.pid not in spn:
-  print("ERROR. This SPN doesnt exist")
-  sys.exit()
-
-if 'dataActions' not in spn[args.pid]:
-  print("INFO. This SPN has no data actions")
+  print("ERROR. Run silhouette and extractDataActions.sh first")
   sys.exit()
 
 '''
@@ -37,7 +26,7 @@ S_list.append(("c","Something/*/read"))
 S_list.append(("c","Something/*/action"))
 '''
 
-print(len(S_list),"pairs to analyze for SPN",args.pid)
+print(len(S_list),"pairs to analyze")
 
 if args.verbose:
   for item in S_list:
@@ -46,8 +35,7 @@ if args.verbose:
 random.shuffle(S_list)
 
 # ───────────────────────────────────────────────────────────
-# 1) Define your input data-actions (scope, perm) pairs.
-#    Replace this list with your actual dataActions.
+'''
 S_list = [
     ('a', 'Something/*/read'),
     ('a', '/write'),
@@ -61,7 +49,7 @@ S_list = [
     ('g', '*'),
     ('g', '/read')
 ]
-
+'''
 # ───────────────────────────────────────────────────────────────
 # Rewrite rules
 
