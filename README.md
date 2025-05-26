@@ -181,7 +181,9 @@ Each alternate hierarchy must be described in a "shunt" file, called shunt_{hier
 To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv, add or modify a child/parent relationship and run silhouette with your usual options
 
 ### Data perimeter
-Once you have run silhouette successfully across your Tenant, you may calculate the data perimeter of all your SPNs using the *dataPerimeter.py* script to discriminate further between SPNs having the same Blast radius. It will dump a CSV containing the pid of each SPN, their blast radius, the count of data actions, the data perimeter and the mean ultrametric distance between data actions.
+Once you have run silhouette successfully across your Tenant, you may want to calculate the data perimeter of all your SPNs using the *dataPerimeter.py* script to discriminate further between SPNs having the same Blast radius. It will dump a CSV containing the pid of each SPN, their blast radius, the count of data actions, the data perimeter and the mean ultrametric distance between data actions.
+
+Among all SPNs sharing the same Blast Radius, you may prioritize analysis of SPNs having highest data perimeter first.
 
 ```
 pid;blast_radius;data_actions;data_perimeter;mean
