@@ -11,6 +11,9 @@ current_date = datetime.now()
 timestamp = current_date.strftime("%Y-%m-%d")
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--single', type=str, help='display data perimeter for just one SPN id: SINGLE')
+parser.add_argument('--verbose', required=False, action="store_true", help='toggle debugging output')
+args = parser.parse_args()
 
 if os.path.exists('management_hierarchy.csv'):
   hierarchy = load_hierarchy_from_csv("management_hierarchy.csv")
@@ -22,7 +25,7 @@ shunts = {}
 shunts['native']= hierarchy
 
 
-def data_action_tuples(pid,role_dict):
+def data_action_tuples(pid,role_dict,verbose):
     cdict = {}
     shunt = 'native'
     blast_radii = {}
@@ -31,6 +34,10 @@ def data_action_tuples(pid,role_dict):
 
     if pid in role_dict:
         permiplets = group_permiplets_by_action_scope(shunts[shunt], role_dict[pid], collapsed=False)
+        if verbose:
+          print("permiplets:")
+          for p in permiplets:
+            print("  ",p)
     else:
         return None
 
@@ -79,7 +86,8 @@ def data_action_tuples(pid,role_dict):
         remaining_indices.remove(next_idx)
 
     # Convert indices to actual data action tuples
-    ordered_tuples = [list(cdict.keys())[list(cdict.values()).index(i)] for i in ordered_indices]
+    TSP_tour = [list(cdict.keys())[list(cdict.values()).index(i)] for i in ordered_indices]
+    TSP_tour_steps = []
 
     # Calculate Data Perimeter (TSP-style perimeter with wraparound)
     perimeter = 0
@@ -87,27 +95,31 @@ def data_action_tuples(pid,role_dict):
         a = ordered_indices[i]
         b = ordered_indices[(i + 1) % n]  # wrap around
         perimeter += distance_matrix[a, b]
+        TSP_tour_steps.append(distance_matrix[a, b])
 
     # Calculate Mean (Avg distance over the whole distance matrix)
-    n = distance_matrix.shape[0]
-    total_pairs = n * (n - 1) // 2
+    #n = distance_matrix.shape[0]
+    if verbose:
+      print("number of permiplets",n)
+    total_permiplet_pairs = n * (n - 1) // 2
     total_sum = 0.0
 
     # Sum over all upper triangle entries (excluding diagonal)
-    if total_pairs>0:
+    if total_permiplet_pairs>0:
       for i in range(n):
           for j in range(i + 1, n):
               total_sum += distance_matrix[i, j]
 
-      mean = total_sum / total_pairs
+      mean = total_sum / total_permiplet_pairs
     else:
       mean = distance_matrix[0, 0]
 
     return {
-        "ordered_tuples": ordered_tuples,
+        "TSP_tour": TSP_tour,
+        "TSP_steps": TSP_tour_steps,
         "data_perimeter": perimeter,
         "mean": mean,
-        "data_actions": n
+        "permiplets": n
     }
 
 def load_blast_radii(csv_file):
@@ -141,7 +153,7 @@ def group_by_band(df, epsilon=1e-35):
 
 def analyze_band_spread_from_csv(csv_path):
     df = pd.read_csv(csv_path, sep=';')
-    df['P_n'] = df['data_perimeter'] / df['data_actions']
+    df['P_p'] = df['data_perimeter'] / df['permiplets']
 
     print(df)
 
@@ -153,7 +165,7 @@ def analyze_band_spread_from_csv(csv_path):
             continue  # skip small bands
 
         band_df = pd.DataFrame(rows)
-        perimeter_sum = band_df['P_n'].sum()
+        perimeter_sum = band_df['P_p'].sum()
         mean_sum = band_df['mean'].sum()
 
         avg_perimeter = perimeter_sum / len(band_df)
@@ -179,8 +191,33 @@ else:
   print("ERROR. sorted NHIs file not found. Please run Silhouette first.")
   sys.exit()
 
+
+if args.single:
+  geo=data_action_tuples(args.single, role_dict,False)
+  print("number of permiplets:",geo['permiplets'])
+  print("data perimeter:",geo['data_perimeter'])
+  if args.verbose:
+    print("TSP tour:")
+    for o in zip(geo['TSP_tour'],geo['TSP_steps']):
+      print(o)
+  sys.exit()
+
 # Generate CSV output
-print("pid;blast_radius;data_actions;data_perimeter;mean")
+rows = []
 for pid, blast_radius in brd.items():
-  geo=data_action_tuples(pid,role_dict)
-  print(pid+str(";")+str(blast_radius)+str(";")+str(geo['data_actions'])+str(";")+str(geo['data_perimeter'])+str(";")+str(geo['mean']))
+    geo = data_action_tuples(pid, role_dict,False)
+    rows.append({
+        "pid": pid,
+        "blast_radius": float(blast_radius),
+        "permiplets": int(geo['permiplets']),
+        "data_perimeter": float(geo['data_perimeter']),
+        "mean": float(geo['mean'])
+    })
+
+# Create DataFrame
+df = pd.DataFrame(rows)
+
+# Sort by blast_radius and data_perimeter, both descending
+df = df.sort_values(by=["blast_radius", "data_perimeter"], ascending=[False, False])
+df.to_csv(f"perimeter_{timestamp}.csv", index=False)
+

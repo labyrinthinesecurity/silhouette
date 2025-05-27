@@ -30,7 +30,7 @@ In the data plane, you may also calculate the *data perimeter* of your NHIs. It 
 - Python 3.6 or later
 
 ## Configure
-You need to have access to an auditor SPN with tenant-wide read only permissions in Azure, and the ability to list and get SPNs details from Entra ID
+You need to have an auditor SPN with the Reader Built-in Role assigned at Tenant level in Azure, and User.Read.All, Group.Read.All, Member.Read.Hidden and Directory.Read.All in Microsoft Graph and Windows Active Directory
 
 Then, set 3 environment variables and you're good to go!
 ```
@@ -181,14 +181,31 @@ Each alternate hierarchy must be described in a "shunt" file, called shunt_{hier
 To start experimentating with alternate hierarchies, simply copy the native hierarchy called management_hierarchy.csv to shunt_test.csv, add or modify a child/parent relationship and run silhouette with your usual options
 
 ### Data perimeter
-Once you have run silhouette successfully across your Tenant, you may want to calculate the data perimeter of all your SPNs using the *dataPerimeter.py* script to discriminate further between SPNs having the same Blast radius. It will dump a CSV containing the pid of each SPN, their blast radius, the count of data actions, the data perimeter and the mean ultrametric distance between data actions.
+Once you have run silhouette successfully across your Tenant, you may want to calculate the data perimeter of all your SPNs using the *dataPerimeter.py* script to discriminate further between SPNs having the same Blast radius. It will dump a CSV containing the pid of each SPN, their blast radius, the count of data actions (permiplets in fact, see below), the data perimeter and the mean ultrametric distance between permiplets.
 
 Among all SPNs sharing the same Blast Radius, you may prioritize analysis of SPNs having highest data perimeter first.
 
 ```
-pid;blast_radius;data_actions;data_perimeter;mean
+pid;blast_radius;permiplets;data_perimeter;mean
 b17efda0-13fa-47d7-9272-4ecef0381547;0.000244140625;13;0.0005035400390625;0.0001678466796875
 e8878def-d88d-4e1f-b44c-886452a6d45b;0.0625;7;0.12514540553092957;0.009043391793966293
 ```
 
+To print the data perimeter of a given SPN to stdout, simply run
+```
+./dataPerimeter.py --single pid --verbose
+```
+
+It we show you not only the perimeter, but also its contour.
+
 Check my data perimeter preprint for full details: [arxiv Data Perimeter](https://arxiv.org/abs/2505.13238)
+
+#### What is the difference between a permiplet and a data action?
+
+A permiplet is a way to measure the impact of a group of data actions on a given scope, following these rules:
+- wildcard actions always have impact 2, they form a single permiplet and all other data actions in scope are removed
+- if no wildcards, read and write actions on the same scope are merged together into a single permiplet with impact 2
+- if no wildcards, read xor write actions on the same scope are merged together into a single permiplet with impact 1
+- actions always have impact 0 (i.e. they are ignored and do not form any permiplet)
+
+The reason why we group data actions by impact is explained in the Blast radius paper.

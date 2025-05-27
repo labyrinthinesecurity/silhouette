@@ -749,6 +749,8 @@ def generate_WAR_norms(single,combined):
             if scope not in spn[role['pid']]['dataActions_dict']:
               spn[role['pid']]['dataActions_dict'][scope]=[]
             if da not in spn[role['pid']]['dataActions_dict'][scope]:
+              if args.verbose:
+                print("DATA action add",da,"via group",gid,"to scope",scope)
               spn[role['pid']]['dataActions_dict'][scope].append(da)
         if len(groups[gid]['war_permset'])>0:
           for r in groups[gid]['war_permset']:
