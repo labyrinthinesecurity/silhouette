@@ -202,10 +202,6 @@ Check my data perimeter preprint for full details: [arxiv Data Perimeter](https:
 
 #### What is the difference between a permiplet and a data action?
 
-A permiplet is a way to measure the impact of a group of data actions on a given scope, following these rules:
-- wildcard actions always have impact 2, they form a single permiplet and all other data actions in scope are removed
-- if no wildcards, read and write actions on the same scope are merged together into a single permiplet with impact 2
-- if no wildcards, read xor write actions on the same scope are merged together into a single permiplet with impact 1
-- actions always have impact 0 (i.e. they are ignored and do not form any permiplet)
+A permiplet is a way to measure the **impact** of SPN data actions on a given scope, so it's a small, local group of data actions. At a given scope, the permiplet count is always lower or equal to the data actions count.
 
-The reason why we group data actions by impact is explained in the Blast radius paper.
+The notion of impact is explained in the Blast Radius paper.
