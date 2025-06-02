@@ -542,6 +542,7 @@ def generate_WAR_norms(single,combined):
             groups[ag['id']]['golden_counts']={}
             groups[ag['id']]['dataActions']=False
             groups[ag['id']]['dataActions_dict']={}
+            groups[ag['id']]['actions_dict']={}
             groups[ag['id']]['rdids']=[]
             groups[ag['id']]['resolutions']=[]
             groups[ag['id']]['WAR']=0
@@ -596,6 +597,7 @@ def generate_WAR_norms(single,combined):
         spn[role['pid']]['D']=False
         spn[role['pid']]['dataActions']=False
         spn[role['pid']]['dataActions_dict']={}
+        spn[role['pid']]['actions_dict']={}
         spn[role['pid']]['rdids']=[]
         spn[role['pid']]['resolutions']=[]
         spn[role['pid']]['minW']=0
@@ -638,6 +640,7 @@ def generate_WAR_norms(single,combined):
             groups[ag['id']]['golden_counts']={}
             groups[ag['id']]['dataActions']=False
             groups[ag['id']]['dataActions_dict']={}
+            groups[ag['id']]['actions_dict']={}
             groups[ag['id']]['rdids']=[]
             groups[ag['id']]['resolutions']=[]
             groups[ag['id']]['WAR']=0
@@ -680,6 +683,14 @@ def generate_WAR_norms(single,combined):
                     groups[ag['id']]['resolutions'][cnt]=min(r,groups[ag['id']]['resolutions'][cnt])
                 if 'actions' in combined:
                   actions=json.loads(combined['actions'])
+                  if len(actions)>0:
+                    if combined['scope'] not in groups[ag['id']]['actions_dict']:
+                      groups[ag['id']]['actions_dict'][combined['scope']]=[]
+                    for a in actions:
+                      if a not in groups[ag['id']]['actions_dict'][combined['scope']]:
+                        if args.verbose:
+                          print("CTRL action groups adding",a,"to scope",combined['scope'])
+                        groups[ag['id']]['actions_dict'][combined['scope']].append(a)
                 else:
                   actions=[]
                 if 'notActions' in combined:
@@ -744,6 +755,14 @@ def generate_WAR_norms(single,combined):
     if len(spn[role['pid']]['rdids'])>0:
       for gid in spn[role['pid']]['groups']:
         spn[role['pid']]['dataActions']=(spn[role['pid']]['dataActions'] or groups[gid]['dataActions'])
+        for scope in groups[gid]['actions_dict']:
+          for a in groups[gid]['actions_dict'][scope]:
+            if scope not in spn[role['pid']]['actions_dict']:
+              spn[role['pid']]['actions_dict'][scope]=[]
+            if a not in spn[role['pid']]['actions_dict'][scope]:
+              if args.verbose:
+                print("CTRL action add",a,"via group",gid,"to scope",scope)
+              spn[role['pid']]['actions_dict'][scope].append(a)
         for scope in groups[gid]['dataActions_dict']:
           for da in groups[gid]['dataActions_dict'][scope]:
             if scope not in spn[role['pid']]['dataActions_dict']:
@@ -790,6 +809,14 @@ def generate_WAR_norms(single,combined):
               spn[role['pid']]['resolutions'][cnt]=min(r,spn[role['pid']]['resolutions'][cnt])
       if 'actions' in combined:
         actions=json.loads(combined['actions'])
+        if len(actions)>0:
+          if combined['scope'] not in spn[role['pid']]['actions_dict']:
+            spn[role['pid']]['actions_dict'][combined['scope']]=[]
+          for a in actions:
+            if a not in spn[role['pid']]['actions_dict'][combined['scope']]:
+              if args.verbose:
+                print("CTRL action spn add action",a,"to scope",combined['scope'])
+              spn[role['pid']]['actions_dict'][combined['scope']].append(a)
       else:
         actions=[]
       if 'notActions' in combined:
