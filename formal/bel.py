@@ -3,9 +3,10 @@
 import lex as lex
 import yacc as yacc
 import re,sys,json
-
 import argparse
 from datetime import datetime
+import functools
+print = functools.partial(print, flush=True)    # forces flush=True for all print() calls
 
 current_date = datetime.now()
 current_timestamp = current_date.strftime("%Y-%m-%d")
@@ -15,6 +16,7 @@ parser.add_argument('--action', type=str, help='an Azure action or data action')
 parser.add_argument('--ultra', required=False, action="store_true", help='an Azure action or data action')
 parser.add_argument('--notActions', type=str, help='a comma separated list of not actions or not data actions')
 args = parser.parse_args()
+
 
 # --------------------
 # Lexer
@@ -145,21 +147,29 @@ def min_ultrametric_distance(tree):
             paths.extend(collect_paths(v, path + [k]))
         return paths
 
-    def lca_depth(path1, path2):
+    def lca_depth_and_path(path1, path2):
         depth = 0
         for a, b in zip(path1, path2):
             if a == b:
                 depth += 1
             else:
                 break
-        return depth
+        return depth, path1[:depth]
 
     leaf_paths = collect_paths(tree, [])
-    min_lca = 9999999999
+    min_lca = float('inf')
+    min_pair = None
+    min_lca_path = None
+
     for i in range(len(leaf_paths)):
         for j in range(i + 1, len(leaf_paths)):
-            min_lca = min(min_lca, lca_depth(leaf_paths[i], leaf_paths[j]))
-    return min_lca
+            depth, lca_path = lca_depth_and_path(leaf_paths[i], leaf_paths[j])
+            if depth < min_lca:
+                min_lca = depth
+                min_pair = ('/'.join(leaf_paths[i]), '/'.join(leaf_paths[j]))
+                min_lca_path = lca_path
+
+    return min_lca, min_pair, min_lca_path
 
 def find_min_ultrametric_pair(tree):
     def collect_paths(node, path):
@@ -180,7 +190,7 @@ def find_min_ultrametric_pair(tree):
         return common
 
     leaf_paths = collect_paths(tree, [])
-    min_depth = 999999999
+    min_depth = float('inf')
     best_pair = ([], [])
     best_lca = []
 
@@ -205,22 +215,161 @@ def ultrametric_from_file(filename, all_actions_file='azureActions.txt'):
         try:
             expanded = expand_actions(line, all_actions_file=all_actions_file)
             tree = build_hierarchy(expanded)
-            distance = min_ultrametric_distance(tree)
-            results[line] = distance
+            distance,_,_ = min_ultrametric_distance(tree)
+            if distance < 100:
+              results[line] = distance
         except Exception as e:
             results[line] = f"Error: {e}"
     return results
 
+import random
+
+def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azureActions.txt'):
+    """
+    Given a concrete action string `action`, runs a genetic algorithm to find a single-wildcard
+    pattern that maximizes the ultrametric distance among its expanded actions.
+
+    - pop: population size (number of (x,y) pairs per generation)
+    - generations: number of GA generations to run
+    - all_actions_file: path to the file with all Az actions for expansion
+
+    Returns:
+        best_pattern (str): the wildcarded action string with maximal ultradistance
+        best_distance (int): the corresponding maximal ultrametric distance
+    """
+    # Cache: maps (x, y) -> ultrametric distance
+    cache = {}
+
+    length = len(action)
+
+    def compute_ultra_for_xy(x, y):
+        # If seen before, return cached
+        if (x, y) in cache:
+            return cache[(x, y)][0]
+        # Build wildcard pattern by replacing action[x:y] -> '*'
+        # Find start of last segment
+        last_slash = action.rfind('/')
+        if last_slash == -1:
+          return float('inf')  # Invalid action format
+        # Prevent wildcard from fully or partially cutting into the last segment (unless it replaces it)
+        if y > last_slash and x < len(action):
+          return float('inf')  # Invalid wildcard placement
+
+        pattern = action[:x] + '*' + action[y:]
+
+        # Expand and compute ultradistance
+        expanded = expand_actions(pattern, all_actions_file=all_actions_file)
+        if not expanded:
+            dist = float('inf')
+            bpair = (None,None)
+        else:
+            tree = build_hierarchy(expanded)
+            dist,bpair,_ = min_ultrametric_distance(tree)
+        cache[(x, y)] = (dist,bpair)
+        return dist
+
+    # Initialize population: list of (x, y) with 0 <= x < y <= length
+    population = []
+    N=pop
+
+    last_slash = action.rfind('/')
+    first_dot = action.rfind('.')
+    
+    # Ensure wildcard does not partially replace the last segment
+    def is_valid_wildcard(x, y):
+    # Allow wildcard only if:
+    # - it ends before the last segment: y <= last_slash
+    # - or it fully replaces the last segment: x <= last_slash and y == len(action)
+      return (y <= last_slash or (x <= last_slash and y == len(action))) and (x > first_dot + 3)
+
+    population = []
+    while len(population) < N:
+      x = random.randint(0, len(action) - 2)
+      y = random.randint(x + 1, len(action))
+      if not is_valid_wildcard(x, y):
+        continue
+      population.append((x, y))
+
+    best_pair = None
+    best_distance = float('inf')
+
+    for gen in range(generations):
+        #print("generation:",gen)
+        #print("population:",len(population),population)
+        # Evaluate fitness for all individuals
+        fitness = [(compute_ultra_for_xy(x, y), (x, y)) for (x, y) in population]
+        fitness.sort(reverse=False, key=lambda t: t[0])
+        # Track global best
+        top_dist, top_pair = fitness[0]
+        if top_dist <  best_distance:
+            best_distance = top_dist
+            best_pair = top_pair
+
+        # Selection: take top 50%
+        survivors = [pair for (_, pair) in fitness[: N // 2]]
+
+        # Reproduce: fill new population by mutating survivors
+        new_population = survivors.copy()
+        while len(new_population) < N:
+            parent = random.choice(survivors)
+            x_parent, y_parent = parent
+
+            # Mutation: tweak x or y by ±1..3 positions, then clamp
+            if random.random() < 0.5:
+                # mutate x
+                delta = random.randint(-3, 3)
+                x_new = max(0, min(length - 2, x_parent + delta))
+                # ensure y_new > x_new
+                y_new = max(x_new + 1, y_parent)
+                if y_new > length:
+                    y_new = length
+                    if x_new >= y_new:
+                        x_new = y_new - 1
+                # Safety net: ensure wildcard does not intrude into the last segment unless replacing it entirely
+                if not is_valid_wildcard(x_new, y_new):
+                  continue 
+                new_population.append((x_new, y_new))
+            else:
+                # mutate y
+                delta = random.randint(-3, 3)
+                y_new = max(1, min(length, y_parent + delta))
+                # ensure y_new > x_parent
+                if y_new <= x_parent:
+                    y_new = x_parent + 1
+                if y_new > length:
+                    y_new = length
+                if not is_valid_wildcard(x_parent, y_new):
+                  continue
+                new_population.append((x_parent, y_new))
+
+        population = new_population
+    # Build best pattern string
+    if best_pair:
+      x_best, y_best = best_pair
+      best_pattern = action[:x_best] + '*' + action[y_best:]
+      if (x_best,y_best) not in cache:
+        compute_ultra_for_xy(x, y)
+      return best_pattern, best_distance,cache[(x_best,y_best)]
+    else:
+      return None,None,None
 
 # --------------------
 # CLI usage
 # --------------------
 if __name__ == '__main__':
+    '''
+    print(optimize_wildcard_ultradist('Microsoft.Network/firewallPolicies/ruleCollectionGroups/delete', pop=50, generations=50))
+    with open('azureActions.txt', 'r') as f:
+        actions = [line.strip() for line in f if line.strip()]
+    for action in actions:
+      print(optimize_wildcard_ultradist(action, pop=20, generations=40))
+    sys.exit()                            
+    '''
     if args.ultra:
       res=ultrametric_from_file('wildcardActions.txt')
       print(json.dumps(res,indent=2))
       sys.exit()
-
+    
     not_patterns=[]
     if args.notActions:
       not_patterns = [na.strip() for na in args.notActions.split(',') if na.strip()]
@@ -230,7 +379,7 @@ if __name__ == '__main__':
     #for r in sorted(results):
     #    print(r)
     print(len(results))
-    #sys.exit()
+    sys.exit()
     hierarchy=build_hierarchy(results)
     leaf1, leaf2, lca = find_min_ultrametric_pair(hierarchy)
     print_hierarchy(
