@@ -72,6 +72,7 @@ silhouette.py supports the following command line options, detailed thereafter:
 --live            refresh local Silhouette caches (slow, but accurate)
 --apps            ignore Managed Identities
 --mis             ignore Applications 
+--frs             generate a file to produce your NHI fibers
 --verbose         produce rich stdout logs for troubleshooting and/or checking progress
 ```
 
@@ -88,6 +89,12 @@ silhouette.py --single f88b148f-5e7d-4b6a-a9a9-08d1911b1fe2
 
   Azure Data Plane> blast radius: 0.0625
 ```
+
+#### --frs option
+This option generates a file called AZURE_FRS.CSV
+This file has 2 columns: spn pid and (role definition id,level) pair represented as rdid:level. Level is an integer (1 stands for Management Group level, 2 for Subscription level, 3 for Resource Group level). It is a pre-requisite if you want to run the [Azure Fast Fibration Partitioning tool](https://github.com/labyrinthinesecurity/fastFibration) to group your NHIs by fibers.
+
+To know more about NHI fibers, check out [this article](https://www.linkedin.com/pulse/taming-nhis-azure-aws-part-2-foundations-christophe-parisel-r6dfe/).
 
 #### Caching options
 By default, SPN IDs, roles and groups are persisted in several local files that you don't need to know about but tha we reference for your information:
