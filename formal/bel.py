@@ -27,7 +27,7 @@ t_WILDCARD = r'\*'
 t_SLASH   = r'/'
 
 def t_TEXT(t):
-    r'[a-zA-Z.0-9]+'
+    r'[a-zA-Z0-9.-_{}$]+'
     return t
 
 t_ignore = ' \t\n'
@@ -357,14 +357,12 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 # CLI usage
 # --------------------
 if __name__ == '__main__':
-    '''
-    print(optimize_wildcard_ultradist('Microsoft.Network/firewallPolicies/ruleCollectionGroups/delete', pop=50, generations=50))
+    #print(optimize_wildcard_ultradist('Microsoft.Network/firewallPolicies/ruleCollectionGroups/delete', pop=50, generations=50))
     with open('azureActions.txt', 'r') as f:
         actions = [line.strip() for line in f if line.strip()]
     for action in actions:
       print(optimize_wildcard_ultradist(action, pop=20, generations=40))
     sys.exit()                            
-    '''
     if args.ultra:
       res=ultrametric_from_file('wildcardActions.txt')
       print(json.dumps(res,indent=2))
@@ -379,6 +377,8 @@ if __name__ == '__main__':
     #for r in sorted(results):
     #    print(r)
     print(len(results))
+    for r in results:
+      print(r)
     sys.exit()
     hierarchy=build_hierarchy(results)
     leaf1, leaf2, lca = find_min_ultrametric_pair(hierarchy)
