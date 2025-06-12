@@ -12,9 +12,10 @@ current_date = datetime.now()
 current_timestamp = current_date.strftime("%Y-%m-%d")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--action', type=str, help='an Azure action or data action')
-parser.add_argument('--ultra', required=False, action="store_true", help='an Azure action or data action')
-parser.add_argument('--notActions', type=str, help='a comma separated list of not actions or not data actions')
+parser.add_argument('--action', type=str, help='an Azure action, eg Microsoft.*/read')
+parser.add_argument('--discover', required=False, action="store_true", help='generate wildcards and discover extreme action pairs from official azure actions. Run extractAzureActions.sh first!')
+parser.add_argument('--evaluate', required=False, action="store_true", help='count explicit actions for each customer wildcard action. Run extractCustomerWildcardActions.sh first!')
+parser.add_argument('--notActions', type=str, help='a comma separated list of not actions')
 args = parser.parse_args()
 
 
@@ -357,38 +358,24 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 # CLI usage
 # --------------------
 if __name__ == '__main__':
-    #print(optimize_wildcard_ultradist('Microsoft.Network/firewallPolicies/ruleCollectionGroups/delete', pop=50, generations=50))
-    with open('azureActions.txt', 'r') as f:
-        actions = [line.strip() for line in f if line.strip()]
-    for action in actions:
-      print(optimize_wildcard_ultradist(action, pop=20, generations=40))
-    sys.exit()                            
-    if args.ultra:
-      res=ultrametric_from_file('wildcardActions.txt')
+    if args.discover:
+      with open('azureActions.txt', 'r') as f:
+          actions = [line.strip() for line in f if line.strip()]
+      for action in actions:
+        print(optimize_wildcard_ultradist(action, pop=20, generations=40))
+      sys.exit()                            
+    if args.evaluate:
+      res=ultrametric_from_file('customerWildcardActions.txt')
       print(json.dumps(res,indent=2))
       sys.exit()
-    
-    not_patterns=[]
-    if args.notActions:
-      not_patterns = [na.strip() for na in args.notActions.split(',') if na.strip()]
-    results = set(expand_actions(args.action))
-    for na in not_patterns:
-      results -= set(expand_actions(na))
-    #for r in sorted(results):
-    #    print(r)
-    print(len(results))
-    for r in results:
-      print(r)
-    sys.exit()
-    hierarchy=build_hierarchy(results)
-    leaf1, leaf2, lca = find_min_ultrametric_pair(hierarchy)
-    print_hierarchy(
-      hierarchy,
-      highlight_leaves=[leaf1, leaf2],
-      highlight_lca=lca
-    )
-    print("")
-    print("Max ultrametric distance (LCA depth):", len(lca))
-    print("Representative leaf pair:")
-    print("/".join(leaf1))
-    print("/".join(leaf2))
+    if args.action: 
+      not_patterns=[]
+      if args.notActions:
+        not_patterns = [na.strip() for na in args.notActions.split(',') if na.strip()]
+      results = set(expand_actions(args.action))
+      for na in not_patterns:
+        results -= set(expand_actions(na))
+      print(len(results))
+      for r in results:
+        print(r)
+      sys.exit()
