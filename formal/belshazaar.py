@@ -172,38 +172,6 @@ def min_ultrametric_distance(tree):
 
     return min_lca, min_pair, min_lca_path
 
-def find_min_ultrametric_pair(tree):
-    def collect_paths(node, path):
-        if not node:
-            return [path]
-        paths = []
-        for k, v in node.items():
-            paths.extend(collect_paths(v, path + [k]))
-        return paths
-
-    def lca_path(path1, path2):
-        common = []
-        for a, b in zip(path1, path2):
-            if a == b:
-                common.append(a)
-            else:
-                break
-        return common
-
-    leaf_paths = collect_paths(tree, [])
-    min_depth = float('inf')
-    best_pair = ([], [])
-    best_lca = []
-
-    for i in range(len(leaf_paths)):
-        for j in range(i + 1, len(leaf_paths)):
-            lca = lca_path(leaf_paths[i], leaf_paths[j])
-            if len(lca) < min_depth:
-                min_depth = len(lca)
-                best_pair = (leaf_paths[i], leaf_paths[j])
-                best_lca = lca
-    return best_pair[0], best_pair[1], best_lca
-
 def ultrametric_from_file(filename, all_actions_file='azureActions.txt'):
     def read_actions(file_path):
         with open(file_path, 'r') as f:
@@ -238,6 +206,8 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         best_pattern (str): the wildcarded action string with maximal ultradistance
         best_distance (int): the corresponding maximal ultrametric distance
     """
+    print()
+    print("ENTERING", action)
     # Cache: maps (x, y) -> ultrametric distance
     cache = {}
 
@@ -245,36 +215,44 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 
     def compute_ultra_for_xy(x, y):
         # If seen before, return cached
+        pattern = action[:x] + '*' + action[y:]
         if (x, y) in cache:
-            return cache[(x, y)][0]
+            return cache[(x, y)][0],pattern,x,y
         # Build wildcard pattern by replacing action[x:y] -> '*'
         # Find start of last segment
         last_slash = action.rfind('/')
+        #print("U",pattern,y,last_slash,x,action[:x-1],len(action))
         if last_slash == -1:
-          return float('inf')  # Invalid action format
+          return float('inf'),pattern,x,y  # Invalid action format
         # Prevent wildcard from fully or partially cutting into the last segment (unless it replaces it)
+#        pattern_parts = pattern.strip().split('/')
+#        if '*' in pattern_parts[-1] and pattern_parts[-1] != '*':
         if y > last_slash and x < len(action):
-          return float('inf')  # Invalid wildcard placement
-
-        pattern = action[:x] + '*' + action[y:]
+        #if y > last_slash and ('/' in action[:x-1]):
+          #print("P",pattern,y,last_slash,x,action[:x-1],len(action))
+          return float('inf'),pattern,x,y  # Invalid wildcard placement
 
         # Expand and compute ultradistance
         expanded = expand_actions(pattern, all_actions_file=all_actions_file)
-        if not expanded:
+        if (not expanded) or (len(expanded) == 1):
             dist = float('inf')
             bpair = (None,None)
+            tree = None
         else:
             tree = build_hierarchy(expanded)
             dist,bpair,_ = min_ultrametric_distance(tree)
+            #print("MIN EX",pattern,len(expanded),expanded,dist,bpair)
+            #print("TREE")
+            #print(tree)
         cache[(x, y)] = (dist,bpair)
-        return dist
+        return dist,pattern,x,y
 
     # Initialize population: list of (x, y) with 0 <= x < y <= length
     population = []
     N=pop
 
     last_slash = action.rfind('/')
-    first_dot = action.rfind('.')
+    first_dot = action.find('.')
     
     # Ensure wildcard does not partially replace the last segment
     def is_valid_wildcard(x, y):
@@ -298,16 +276,25 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         #print("generation:",gen)
         #print("population:",len(population),population)
         # Evaluate fitness for all individuals
-        fitness = [(compute_ultra_for_xy(x, y), (x, y)) for (x, y) in population]
+        ultras= [(compute_ultra_for_xy(x, y), (x, y)) for (x, y) in population]
+        #print(ultras)
+        fitness = [ udist[0] for udist in ultras ]
+        #print()
+        #for f in fitness:
+        #  print(">",f)
         fitness.sort(reverse=False, key=lambda t: t[0])
         # Track global best
-        top_dist, top_pair = fitness[0]
+        #print(fitness)
+        #print("F0",fitness[0])
+        top_dist = fitness[0][0]
+        top_pair = (fitness[0][2],fitness[0][3])
+#        top_dist, _, top_pair = fitness[0]
         if top_dist <  best_distance:
             best_distance = top_dist
             best_pair = top_pair
 
         # Selection: take top 50%
-        survivors = [pair for (_, pair) in fitness[: N // 2]]
+        survivors = [(left,right) for (_, pat, left, right) in fitness[: N // 2]]
 
         # Reproduce: fill new population by mutating survivors
         new_population = survivors.copy()
@@ -316,10 +303,10 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
             x_parent, y_parent = parent
 
             # Mutation: tweak x or y by ±1..3 positions, then clamp
-            if random.random() < 0.5:
+            if random.random() < 0.4:
                 # mutate x
-                delta = random.randint(-3, 3)
-                x_new = max(0, min(length - 2, x_parent + delta))
+                delta = random.randint(-20, 20)
+                x_new = max(0, min(length - 19, x_parent + delta))
                 # ensure y_new > x_new
                 y_new = max(x_new + 1, y_parent)
                 if y_new > length:
@@ -332,7 +319,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
                 new_population.append((x_new, y_new))
             else:
                 # mutate y
-                delta = random.randint(-3, 3)
+                delta = random.randint(-20, 20)
                 y_new = max(1, min(length, y_parent + delta))
                 # ensure y_new > x_parent
                 if y_new <= x_parent:
@@ -349,9 +336,14 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
       x_best, y_best = best_pair
       best_pattern = action[:x_best] + '*' + action[y_best:]
       if (x_best,y_best) not in cache:
-        compute_ultra_for_xy(x, y)
+        compute_ultra_for_xy(x_best, y_best)
       return best_pattern, best_distance,cache[(x_best,y_best)]
     else:
+      print("NONE for",action,population)
+      print()
+      for ff in fitness:
+        print(ff)
+      print()
       return None,None,None
 
 # --------------------
@@ -362,7 +354,11 @@ if __name__ == '__main__':
       with open('azureActions.txt', 'r') as f:
           actions = [line.strip() for line in f if line.strip()]
       for action in actions:
-        print(optimize_wildcard_ultradist(action, pop=20, generations=40))
+        genetics=optimize_wildcard_ultradist(action, pop=50, generations=50)
+        if genetics[0] is not None:
+          print(f"{genetics[0]};{genetics[1]};{genetics[2][1][0]};{genetics[2][1][1]}")
+        else:
+          print(f"{action};;{action};{action}")
       sys.exit()                            
     if args.evaluate:
       res=ultrametric_from_file('customerWildcardActions.txt')

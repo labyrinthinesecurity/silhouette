@@ -12,7 +12,7 @@ Silhouette is a **Non Human Identities (NHI) sorter and roles minimizer** which 
 
 The higher the scores, the more powerful the SPN.
 
-Direct role assignements are taken into account as well as indirect assignments through group membership.
+Direct role assignments are taken into account as well as indirect assignments through group membership.
 
 Sorting silhouette by control plane or data plane score is very useful to prepare for a NHI de-escalation plan. It can also be used to monitor NHIs lifecycles (create/delete NHIs, change in their permissions)
 
@@ -49,7 +49,7 @@ To sort your SPNs, run ***silhouette.py*** without options. It will generate *so
 - *WAR*, the control plane score, in descending order
 - *blast radius*, the data plane score, in descending order
 - *D*, a boolean identifying whether the SPN can define roles
-- *A*, a boolean identifying whether the SPN can make role assignements
+- *A*, a boolean identifying whether the SPN can make role assignments
 
 WARNING: scanning a large number of SPNs and their groups membership takes a long time, so silhouette.py throttles the number of API calls it makes against Azure. ***Expect the sorting to take at least 2 hours per 10000 SPNs***
 
