@@ -206,8 +206,6 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         best_pattern (str): the wildcarded action string with maximal ultradistance
         best_distance (int): the corresponding maximal ultrametric distance
     """
-    print()
-    print("ENTERING", action)
     # Cache: maps (x, y) -> ultrametric distance
     cache = {}
 
@@ -305,8 +303,8 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
             # Mutation: tweak x or y by ±1..3 positions, then clamp
             if random.random() < 0.4:
                 # mutate x
-                delta = random.randint(-20, 20)
-                x_new = max(0, min(length - 19, x_parent + delta))
+                delta = random.randint(-4, 4)
+                x_new = max(0, min(length - 3, x_parent + delta))
                 # ensure y_new > x_new
                 y_new = max(x_new + 1, y_parent)
                 if y_new > length:
@@ -339,11 +337,11 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         compute_ultra_for_xy(x_best, y_best)
       return best_pattern, best_distance,cache[(x_best,y_best)]
     else:
-      print("NONE for",action,population)
-      print()
-      for ff in fitness:
-        print(ff)
-      print()
+      #print("NONE for",action,population)
+      #print()
+      #for ff in fitness:
+      #  print(ff)
+      #print()
       return None,None,None
 
 # --------------------
@@ -351,10 +349,11 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 # --------------------
 if __name__ == '__main__':
     if args.discover:
+      print("wildcard;diameter;left_pair;right_pair")
       with open('azureActions.txt', 'r') as f:
           actions = [line.strip() for line in f if line.strip()]
       for action in actions:
-        genetics=optimize_wildcard_ultradist(action, pop=50, generations=50)
+        genetics=optimize_wildcard_ultradist(action, pop=40, generations=40)
         if genetics[0] is not None:
           print(f"{genetics[0]};{genetics[1]};{genetics[2][1][0]};{genetics[2][1][1]}")
         else:
