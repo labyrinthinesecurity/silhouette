@@ -184,9 +184,11 @@ def ultrametric_from_file(filename, all_actions_file='azureActions.txt'):
         try:
             expanded = expand_actions(line, all_actions_file=all_actions_file)
             tree = build_hierarchy(expanded)
-            distance,_,_ = min_ultrametric_distance(tree)
+            distance,minpair,minpath = min_ultrametric_distance(tree)
             if distance < 100:
-              results[line] = distance
+              left_pair=minpair[0]
+              right_pair=minpair[1]
+              results[line] = str(distance)+";"+str(left_pair)+";"+str(right_pair)
         except Exception as e:
             results[line] = f"Error: {e}"
     return results
@@ -361,7 +363,9 @@ if __name__ == '__main__':
       sys.exit()                            
     if args.evaluate:
       res=ultrametric_from_file('customerWildcardActions.txt')
-      print(json.dumps(res,indent=2))
+      print("wildcard;diameter;left_pair;right_pair")
+      for r in res:
+        print(r+";"+res[r])
       sys.exit()
     if args.action: 
       not_patterns=[]
