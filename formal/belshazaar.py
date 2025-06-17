@@ -28,7 +28,7 @@ t_WILDCARD = r'\*'
 t_SLASH   = r'/'
 
 def t_TEXT(t):
-    r'[a-zA-Z0-9.-_{}$]+'
+    r'[-a-zA-Z0-9._{}$]+'
     return t
 
 t_ignore = ' \t\n'
@@ -217,35 +217,36 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         # If seen before, return cached
         pattern = action[:x] + '*' + action[y:]
         if (x, y) in cache:
-            return cache[(x, y)][0],pattern,x,y
+            return cache[(x, y)][0],pattern,x,y,(None,None)
         # Build wildcard pattern by replacing action[x:y] -> '*'
         # Find start of last segment
         last_slash = action.rfind('/')
         #print("U",pattern,y,last_slash,x,action[:x-1],len(action))
         if last_slash == -1:
-          return float('inf'),pattern,x,y  # Invalid action format
+          return 9999999999,pattern,x,y,(None,None)  # Invalid action format
         # Prevent wildcard from fully or partially cutting into the last segment (unless it replaces it)
-#        pattern_parts = pattern.strip().split('/')
-#        if '*' in pattern_parts[-1] and pattern_parts[-1] != '*':
-        if y > last_slash and x < len(action):
+        pattern_parts = pattern.strip().split('/')
+        if '*' in pattern_parts[-1] and pattern_parts[-1] != '*':
+        #if y > last_slash and x < len(action):
         #if y > last_slash and ('/' in action[:x-1]):
           #print("P",pattern,y,last_slash,x,action[:x-1],len(action))
-          return float('inf'),pattern,x,y  # Invalid wildcard placement
+          return 9999999999,pattern,x,y,(None,None)  # Invalid wildcard placement
 
         # Expand and compute ultradistance
         expanded = expand_actions(pattern, all_actions_file=all_actions_file)
         if (not expanded) or (len(expanded) == 1):
-            dist = float('inf')
+            dist = 9999999999
             bpair = (None,None)
             tree = None
         else:
             tree = build_hierarchy(expanded)
             dist,bpair,_ = min_ultrametric_distance(tree)
-            #print("MIN EX",pattern,len(expanded),expanded,dist,bpair)
+            #print("MIN EX",pattern,len(expanded))
+            #print(expanded,dist,bpair)
             #print("TREE")
             #print(tree)
         cache[(x, y)] = (dist,bpair)
-        return dist,pattern,x,y
+        return dist,pattern,x,y,bpair
 
     # Initialize population: list of (x, y) with 0 <= x < y <= length
     population = []
@@ -253,7 +254,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 
     last_slash = action.rfind('/')
     first_dot = action.find('.')
-    
+
     # Ensure wildcard does not partially replace the last segment
     def is_valid_wildcard(x, y):
     # Allow wildcard only if:
@@ -270,31 +271,42 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
       population.append((x, y))
 
     best_pair = None
-    best_distance = float('inf')
+    best_distance = 9999999999
 
     for gen in range(generations):
         #print("generation:",gen)
         #print("population:",len(population),population)
         # Evaluate fitness for all individuals
         ultras= [(compute_ultra_for_xy(x, y), (x, y)) for (x, y) in population]
-        #print(ultras)
-        fitness = [ udist[0] for udist in ultras ]
+        fitness=[]
+        for udist in ultras:
+          #print("U",udist)
+          #print("..",udist[0][0],udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1])
+          if udist[0][0]<100000 and udist[0][4][0] is not None:
+            #print("appending",((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
+            fitness.append(((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
+          elif udist[0][4][0] is not None:
+            fitness.append((9999999999,-1,-1,-1,-1))
         #print()
         #for f in fitness:
-        #  print(">",f)
+        #  print(">",f,f[0])
         fitness.sort(reverse=False, key=lambda t: t[0])
         # Track global best
-        #print(fitness)
-        #print("F0",fitness[0])
-        top_dist = fitness[0][0]
-        top_pair = (fitness[0][2],fitness[0][3])
+        if len(fitness)==0:
+          #print("existing with",best_distance,best_pair)
+          break
+        #print("FFF",fitness)
+        #print("F0",fitness[0][0])
+        top_dist = round(fitness[0][0]/1000)
+        top_pair = (fitness[0][3],fitness[0][4])
+        #print("TDTP",top_dist,fitness[0][0],fitness[0][1],fitness[0][2])
 #        top_dist, _, top_pair = fitness[0]
         if top_dist <  best_distance:
             best_distance = top_dist
             best_pair = top_pair
 
         # Selection: take top 50%
-        survivors = [(left,right) for (_, pat, left, right) in fitness[: N // 2]]
+        survivors = [(left,right) for (_, _, _, left, right) in fitness[: N // 2]]
 
         # Reproduce: fill new population by mutating survivors
         new_population = survivors.copy()
@@ -303,7 +315,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
             x_parent, y_parent = parent
 
             # Mutation: tweak x or y by ±1..3 positions, then clamp
-            if random.random() < 0.4:
+            if random.random() < 0.2:
                 # mutate x
                 delta = random.randint(-4, 4)
                 x_new = max(0, min(length - 3, x_parent + delta))
@@ -319,7 +331,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
                 new_population.append((x_new, y_new))
             else:
                 # mutate y
-                delta = random.randint(-20, 20)
+                delta = random.randint(-4, 4)
                 y_new = max(1, min(length, y_parent + delta))
                 # ensure y_new > x_parent
                 if y_new <= x_parent:
@@ -339,11 +351,6 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         compute_ultra_for_xy(x_best, y_best)
       return best_pattern, best_distance,cache[(x_best,y_best)]
     else:
-      #print("NONE for",action,population)
-      #print()
-      #for ff in fitness:
-      #  print(ff)
-      #print()
       return None,None,None
 
 # --------------------
@@ -355,7 +362,7 @@ if __name__ == '__main__':
       with open('azureActions.txt', 'r') as f:
           actions = [line.strip() for line in f if line.strip()]
       for action in actions:
-        genetics=optimize_wildcard_ultradist(action, pop=40, generations=40)
+        genetics=optimize_wildcard_ultradist(action, pop=30, generations=20)
         if genetics[0] is not None:
           print(f"{genetics[0]};{genetics[1]};{genetics[2][1][0]};{genetics[2][1][1]}")
         else:
