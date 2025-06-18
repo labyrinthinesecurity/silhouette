@@ -79,7 +79,13 @@ def p_error(p):
 # --------------------
 # Main function
 # --------------------
-def expand_actions(pattern, all_actions_file='azureActions.txt'):
+
+def open_RP_actions(all_actions_file='azureActions.txt'):
+    with open(all_actions_file, 'r') as f:
+        actions = [line.strip().lower() for line in f if line.strip()]
+    return actions
+
+def expand_actions(pattern, actions):
     if pattern.count('*') > 1:
         raise SyntaxError("Only a single wildcard '*' is allowed")
         return []
@@ -94,16 +100,12 @@ def expand_actions(pattern, all_actions_file='azureActions.txt'):
             last = pattern_parts[-1]
             if last not in {"Read","Action","Write","Delete","read", "write", "action", "delete", "*"}:
                 raise ValueError("Last segment must be one of: read, write, action, delete, or *")
-        regex_str = parser.parse(pattern, lexer=lexer)
+        regex_str = parser.parse(pattern.lower(), lexer=lexer)
     except SyntaxError as e:
         print("Error:", e)
         return []
 
     compiled_re = re.compile("^" + regex_str + "$")
-
-    with open(all_actions_file, 'r') as f:
-        actions = [line.strip() for line in f if line.strip()]
-
     matches = [action for action in actions if compiled_re.match(action)]
     return matches
 
@@ -172,37 +174,38 @@ def min_ultrametric_distance(tree):
 
     return min_lca, min_pair, min_lca_path
 
-def ultrametric_from_file(filename, all_actions_file='azureActions.txt'):
+def ultrametric_from_file(filename, actions):
     def read_actions(file_path):
         with open(file_path, 'r') as f:
-            return [line.strip() for line in f if line.strip()]
-
+            return [line.strip().lower() for line in f if line.strip()]
     results = {}
     lines = read_actions(filename)
     for line in lines:
       if line!='*':
-        try:
-            expanded = expand_actions(line, all_actions_file=all_actions_file)
+            expanded = expand_actions(line, actions)
             tree = build_hierarchy(expanded)
             distance,minpair,minpath = min_ultrametric_distance(tree)
             if distance < 100:
               left_pair=minpair[0]
               right_pair=minpair[1]
               results[line] = str(distance)+";"+str(left_pair)+";"+str(right_pair)
-        except Exception as e:
-            results[line] = f"Error: {e}"
+            else:
+              if len(expanded)==1:
+                results[line]="99;"+expanded[0]+";"+expanded [0]   # reflexive pair
+#              else:
+#                print("line/exp/dist/minpair/minpath",line,expanded,distance,minpair,minpath)
     return results
 
 import random
 
-def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azureActions.txt'):
+def optimize_wildcard_ultradist(action, pop, generations, actions):
     """
     Given a concrete action string `action`, runs a genetic algorithm to find a single-wildcard
     pattern that maximizes the ultrametric distance among its expanded actions.
 
     - pop: population size (number of (x,y) pairs per generation)
     - generations: number of GA generations to run
-    - all_actions_file: path to the file with all Az actions for expansion
+    - actions: all Az actions for expansion
 
     Returns:
         best_pattern (str): the wildcarded action string with maximal ultradistance
@@ -233,7 +236,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
           return 9999999999,pattern,x,y,(None,None)  # Invalid wildcard placement
 
         # Expand and compute ultradistance
-        expanded = expand_actions(pattern, all_actions_file=all_actions_file)
+        expanded = expand_actions(pattern, actions)
         if (not expanded) or (len(expanded) == 1):
             dist = 9999999999
             bpair = (None,None)
@@ -241,10 +244,6 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
         else:
             tree = build_hierarchy(expanded)
             dist,bpair,_ = min_ultrametric_distance(tree)
-            #print("MIN EX",pattern,len(expanded))
-            #print(expanded,dist,bpair)
-            #print("TREE")
-            #print(tree)
         cache[(x, y)] = (dist,bpair)
         return dist,pattern,x,y,bpair
 
@@ -315,7 +314,7 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
             x_parent, y_parent = parent
 
             # Mutation: tweak x or y by ±1..3 positions, then clamp
-            if random.random() < 0.2:
+            if random.random() < 0.3:
                 # mutate x
                 delta = random.randint(-4, 4)
                 x_new = max(0, min(length - 3, x_parent + delta))
@@ -357,19 +356,18 @@ def optimize_wildcard_ultradist(action, pop, generations, all_actions_file='azur
 # CLI usage
 # --------------------
 if __name__ == '__main__':
+    actions=open_RP_actions()
     if args.discover:
       print("wildcard;diameter;left_pair;right_pair")
-      with open('azureActions.txt', 'r') as f:
-          actions = [line.strip() for line in f if line.strip()]
       for action in actions:
-        genetics=optimize_wildcard_ultradist(action, pop=30, generations=20)
+        genetics=optimize_wildcard_ultradist(action, pop=20, generations=10, actions=actions)
         if genetics[0] is not None:
           print(f"{genetics[0]};{genetics[1]};{genetics[2][1][0]};{genetics[2][1][1]}")
         else:
           print(f"{action};;{action};{action}")
       sys.exit()                            
     if args.evaluate:
-      res=ultrametric_from_file('customerWildcardActions.txt')
+      res=ultrametric_from_file('customerWildcardActions.txt',actions)
       print("wildcard;diameter;left_pair;right_pair")
       for r in res:
         print(r+";"+res[r])
@@ -377,10 +375,10 @@ if __name__ == '__main__':
     if args.action: 
       not_patterns=[]
       if args.notActions:
-        not_patterns = [na.strip() for na in args.notActions.split(',') if na.strip()]
-      results = set(expand_actions(args.action))
+        not_patterns = [na.strip().lower() for na in args.notActions.split(',') if na.strip()]
+      results = set(expand_actions(args.action.lower(),actions))
       for na in not_patterns:
-        results -= set(expand_actions(na))
+        results -= set(expand_actions(na,actions))
       print(len(results))
       for r in results:
         print(r)
