@@ -281,11 +281,12 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
         for udist in ultras:
           #print("U",udist)
           #print("..",udist[0][0],udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1])
-          if udist[0][0]<100000 and udist[0][4][0] is not None:
-            #print("appending",((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
-            fitness.append(((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
-          elif udist[0][4][0] is not None:
-            fitness.append((9999999999,-1,-1,-1,-1))
+          if udist[0][4] is not None and (udist[0][4][0] is not None):
+            if udist[0][0]<100000:
+              #print("appending",((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
+              fitness.append(((1000*udist[0][0]-udist[1][0]),udist[0][4][0],udist[0][4][1],udist[1][0],udist[1][1]))
+            else:
+              fitness.append((9999999999,-1,-1,-1,-1))
         #print()
         #for f in fitness:
         #  print(">",f,f[0])
