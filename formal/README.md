@@ -16,6 +16,10 @@ The tool works in two modes:
 - **Batch Customer Policy Evaluation** — Analyze your custom wildcards against Azure’s action catalog.
 - **NotActions Support** — Analyze wildcard coverage considering exclusions via NotActions.
 
+## Background
+
+Read my paper called [Quantifying Azure RBAC Wildcard Overreach](https://arxiv.org/abs/2506.10755)
+
 ---
 
 ## Data Preparation
