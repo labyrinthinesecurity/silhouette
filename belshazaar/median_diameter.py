@@ -50,8 +50,8 @@ print(median_diameter,"percentile:",percentile)
 # Create a histogram using Seaborn
 plt.figure(figsize=(5, 3))
 sns.barplot(x='Diameter', y='Count', data=df, color='skyblue')
-plt.axvline(x=median_diameter-1, color='red', linestyle='--', label=f'Median Diameter: {median_diameter}')
-plt.text(median_diameter-0.8, 700, f'Median: {median_diameter:.2f}', color='red', ha='left', va='top')
+plt.axvline(x=median_diameter, color='red', linestyle='--', label=f'Median Diameter: {median_diameter}')
+plt.text(median_diameter, 700, f'Median: {median_diameter:.2f}', color='red', ha='left', va='top')
 
 # Add labels and title
 plt.xlabel('Diameter', fontsize=12)
