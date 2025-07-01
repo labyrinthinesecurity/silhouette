@@ -241,6 +241,7 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
             dist = 9999999999
             bpair = (None,None)
             tree = None
+            #print("....why None?",pattern,expanded,len(expanded))
         else:
             tree = build_hierarchy(expanded)
             dist,bpair,_ = min_ultrametric_distance(tree)
@@ -259,7 +260,8 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
     # Allow wildcard only if:
     # - it ends before the last segment: y <= last_slash
     # - or it fully replaces the last segment: x <= last_slash and y == len(action)
-      return (y <= last_slash or (x <= last_slash and y == len(action))) and (x > first_dot + 3)
+      #udist=(compute_ultra_for_xy(x,y),(x,y))
+      return (y <= last_slash or (x <= last_slash and y == len(action))) and (x > first_dot + 3) #and (udist[0][4] is not None)
 
     population = []
     while len(population) < N:
@@ -270,7 +272,7 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
       population.append((x, y))
 
     best_pair = None
-    best_distance = 9999999999
+    best_distance = 99999999999999
 
     for gen in range(generations):
         #print("generation:",gen)
@@ -317,8 +319,8 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
             # Mutation: tweak x or y by ±1..3 positions, then clamp
             if random.random() < 0.3:
                 # mutate x
-                delta = random.randint(-4, 4)
-                x_new = max(0, min(length - 3, x_parent + delta))
+                delta = random.randint(-20, 20)
+                x_new = max(0, min(length - 19, x_parent + delta))
                 # ensure y_new > x_new
                 y_new = max(x_new + 1, y_parent)
                 if y_new > length:
@@ -331,7 +333,7 @@ def optimize_wildcard_ultradist(action, pop, generations, actions):
                 new_population.append((x_new, y_new))
             else:
                 # mutate y
-                delta = random.randint(-4, 4)
+                delta = random.randint(-20, 20)
                 y_new = max(1, min(length, y_parent + delta))
                 # ensure y_new > x_parent
                 if y_new <= x_parent:
@@ -361,7 +363,7 @@ if __name__ == '__main__':
     if args.discover:
       print("wildcard;diameter;left_pair;right_pair")
       for action in actions:
-        genetics=optimize_wildcard_ultradist(action, pop=20, generations=10, actions=actions)
+        genetics=optimize_wildcard_ultradist(action, pop=40, generations=10, actions=actions)
         if genetics[0] is not None:
           print(f"{genetics[0]};{genetics[1]};{genetics[2][1][0]};{genetics[2][1][1]}")
         else:
