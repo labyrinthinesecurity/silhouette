@@ -10,6 +10,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
+BIGINT=28
+
 current_date = datetime.now()
 current_timestamp = timestamp = current_date.strftime("%Y-%m-%d")
 
@@ -30,6 +32,132 @@ def get_descendants(group_id,token):
     response.raise_for_status()
     time.sleep(0.3)
     return response.json().get("value", [])
+
+def create_service_group(new_group_id,parent_group_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    body = {
+    "kind":"ultrametry",
+    "properties": {
+        "displayName": new_group_id,
+        "parent": {
+            "resourceId": parent_group_id
+                  }
+        }
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Management/serviceGroups/{new_group_id}?api-version=2024-04-01-preview"
+    response = requests.put(url, headers=headers, json=body)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
+def move_service_group(group_id,new_parent_group_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    body = {
+    "kind":"ultrametry",
+    "properties": {
+        "displayName": group_id,
+        "parent": {
+            "resourceId": new_parent_group_id
+                  }
+        }
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Management/serviceGroups/{group_id}?api-version=2024-04-01-preview"
+    response = requests.patch(url, headers=headers, json=body)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
+def delete_service_group(group_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Management/serviceGroups/{group_id}?api-version=2024-04-01-preview"
+    response = requests.delete(url, headers=headers)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
+def ancestors_service_group(group_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    all_items = []
+    url = f"https://management.azure.com/providers/Microsoft.Management/serviceGroups/{group_id}/listAncestors?api-version=2024-04-01-preview"
+    response = requests.post(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    all_items.extend(data.get("value", []))
+    # Paginate using nextLink if it exists
+    next_link = data.get("nextLink")
+    while next_link:
+        response = requests.get(next_link, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        all_items.extend(data.get("value", []))
+        next_link = data.get("nextLink")
+        time.sleep(0.1)
+    return all_items
+
+def create_member(rel_id,group_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    body = {
+        "properties": {
+                        "targetId": f"/providers/Microsoft.Management/serviceGroups/{group_id}"
+                      }
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Relationships/serviceGroupMember/{rel_id}?api-version=2023-09-01-preview"
+    response = requests.put(url, headers=headers, json=body)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
+def get_member(rel_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Relationships/serviceGroupMember/{rel_id}?api-version=2023-09-01-preview"
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
+def delete_member(rel_id,token):
+    if not token:
+      token = get_token('management.azure.com')
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    url = f"https://management.azure.com/providers/Microsoft.Relationships/serviceGroupMember/{rel_id}?api-version=2023-09-01-preview"
+    response = requests.delete(url, headers=headers)
+    response.raise_for_status()
+    time.sleep(0.3)
+    return response.json().get("value", [])
+
 
 def extract_child_id(resource_id):
     """
@@ -478,7 +606,7 @@ def plot_crossplane0(input_path):
     plt.savefig("crossplane.png", bbox_inches='tight')
     #print(grouped[(grouped["log10_WAR/3"] < 3.0) & (grouped["blast_radius"] == 0.0)])
 
-def plot_crossplane(input_path, jitter_strength=0.01):
+def plot_crossplane(input_path, jitter_strength=0.0001):
     """
     Generates a Seaborn scatter plot showing log10(WAR) vs blast_radius,
     with horizontal jitter and point sizes reflecting density.
@@ -493,28 +621,43 @@ def plot_crossplane(input_path, jitter_strength=0.01):
 
     # Clean data
     df = df[df["WAR"] >= 0]
-    df["blast_radius"] = df["blast_radius"].fillna(0.0)
+    #df["blast_radius"] = df["blast_radius"].fillna(0.0)
+    df = df.dropna(subset=["blast_radius"])
     df = df[df["type"].notnull()]
 
     # Compute log10(WAR)/3
-    df["log10_WAR/3"] = (1 / 3) * np.log10(1.0 + df["WAR"])
+#    df["log10_WAR/3"] = (1 / 3) * np.log10(1.0 + df["WAR"])
+    df["log10_WAR/3"] = 1.6 * np.power(df["WAR"]/1000,4)
+    #df=df[df['log10_WAR/3'] < df['blast_radius']]
+
+    df["newblast"] = -np.log2(df["blast_radius"])
+    df["newblast"] = df["newblast"].replace([np.inf, -np.inf], BIGINT)
+    df["newblast"] = df["newblast"].apply(lambda val: 500 if 0 <= val <= 7 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 400 if 8 <= val <= 9 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 300 if 10 <= val <= 11 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 200 if 12 <= val <= 13 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 100 if 14 <= val <= 15 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 0 if 16 <= val <= BIGINT else val)
+
+    df=df[df['WAR'] < df['newblast']]
 
     # Apply horizontal jitter
     rng = np.random.default_rng(seed=42)
-    df["jittered_x"] = df["log10_WAR/3"] + rng.normal(0, jitter_strength, size=len(df))
+    df["jittered_x"] = df["log10_WAR/3"] + abs(rng.normal(0, jitter_strength, size=len(df)))
 
     # Count duplicates based on original values for proper size scaling
-    df["x_bin"] = df["log10_WAR/3"].round(4)
-    df["y_bin"] = df["blast_radius"].round(4)
-    grouped = df.groupby(["x_bin", "y_bin", "type"]).size().reset_index(name='count')
+    df["WAR_bin"] = df["WAR"].round(6)
+    df["blast_bin"] = df["newblast"].round(8)
+    df["blaster"] = df["blast_radius"].round(8)
+    grouped = df.groupby(["WAR_bin", "blast_bin", "type", "blaster"]).size().reset_index(name='count')
 
     # Merge count back to original dataframe
     df = pd.merge(
         df,
         grouped,
         how="left",
-        left_on=["x_bin", "y_bin", "type"],
-        right_on=["x_bin", "y_bin", "type"]
+        left_on=["WAR_bin", "blast_bin", "blast_radius", "type"],
+        right_on=["WAR_bin", "blast_bin", "blaster", "type"]
     )
 
     # Count identity types
@@ -554,5 +697,7 @@ def plot_crossplane(input_path, jitter_strength=0.01):
 
     # Finalize
     plt.tight_layout()
-    plt.savefig("crossplane.png", bbox_inches='tight')
-    print(grouped[(grouped["y_bin"] >= 0.0) & (grouped["x_bin"] >= 0.0)])
+    plt.savefig("newcrossplane.png", bbox_inches='tight')
+    #print(grouped[(grouped["blast_bin"] >= 0.0) & (grouped["WAR_bin"] >= 0.0) ])
+    print(grouped[["WAR_bin","blast_bin","blaster","count"]])
+    #print(df[["WAR_bin","blast_bin","blast_radius"]])
