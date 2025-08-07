@@ -620,34 +620,43 @@ def plot_crossplane(input_path, jitter_strength=0.0001):
     df = pd.read_csv(input_path)
 
     # Clean data
-    df = df[df["WAR"] >= 0]
-    #df["blast_radius"] = df["blast_radius"].fillna(0.0)
-    df = df.dropna(subset=["blast_radius"])
-    df = df[df["type"].notnull()]
+    #df = df[df["WAR"] >= 0]
+    #df = df.dropna(subset=["blast_radius"])
+    #df = df[df["type"].notnull()]
+    df["WAR"] = df["WAR"].fillna(0)
+    df["blast_radius"] = df["blast_radius"].fillna(0.0)
+
 
     # Compute log10(WAR)/3
 #    df["log10_WAR/3"] = (1 / 3) * np.log10(1.0 + df["WAR"])
     df["log10_WAR/3"] = 1.6 * np.power(df["WAR"]/1000,4)
     #df=df[df['log10_WAR/3'] < df['blast_radius']]
+    df['newblast'] = np.where(df['blast_radius'] != 0.0 , -np.log2(df['blast_radius']), BIGINT)
+    #df["newblast"] = -np.log2(df["blast_radius"])
+    #df["newblast"] = df["newblast"].replace([np.inf, -np.inf], BIGINT)
+    df["newblast"] = df["newblast"].apply(lambda val: 1000 if 0 <= val <= 1 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 900 if 2 <= val <= 3 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 800 if 4 <= val <= 5 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 700 if 6 <= val <= 7 else val)
 
-    df["newblast"] = -np.log2(df["blast_radius"])
-    df["newblast"] = df["newblast"].replace([np.inf, -np.inf], BIGINT)
-    df["newblast"] = df["newblast"].apply(lambda val: 500 if 0 <= val <= 7 else val)
-    df["newblast"] = df["newblast"].apply(lambda val: 400 if 8 <= val <= 9 else val)
-    df["newblast"] = df["newblast"].apply(lambda val: 300 if 10 <= val <= 11 else val)
-    df["newblast"] = df["newblast"].apply(lambda val: 200 if 12 <= val <= 13 else val)
-    df["newblast"] = df["newblast"].apply(lambda val: 100 if 14 <= val <= 15 else val)
-    df["newblast"] = df["newblast"].apply(lambda val: 0 if 16 <= val <= BIGINT else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 600 if 8 <= val <= 9 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 500 if 10 <= val <= 11 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 400 if 12 <= val <= 13 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 300 if 14 <= val <= 15 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 200 if 16 <= val <= 17 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 100 if 18 <= val <= 19 else val)
+    df["newblast"] = df["newblast"].apply(lambda val: 0 if 20 <= val <= BIGINT else val)
 
     df=df[df['WAR'] < df['newblast']]
+    df=df[df['blast_radius'] > 0.0]
 
     # Apply horizontal jitter
     rng = np.random.default_rng(seed=42)
     df["jittered_x"] = df["log10_WAR/3"] + abs(rng.normal(0, jitter_strength, size=len(df)))
 
     # Count duplicates based on original values for proper size scaling
-    df["WAR_bin"] = df["WAR"].round(6)
-    df["blast_bin"] = df["newblast"].round(8)
+    df["WAR_bin"] = df["WAR"].round(0)
+    df["blast_bin"] = df["newblast"].round(0)
     df["blaster"] = df["blast_radius"].round(8)
     grouped = df.groupby(["WAR_bin", "blast_bin", "type", "blaster"]).size().reset_index(name='count')
 
