@@ -5,8 +5,9 @@ import pandas as pd
 BIGINT=21
 input_path="sorted_NHIs_2025-08-06.csv"
 raw_df = pd.read_csv(input_path)
-
 raw_df=raw_df[raw_df['blast_radius'] > 0.0]
+
+df_biomes = pd.read_csv('sorted_biomes_2025-08-13.csv')
 
 def map_blast_to_kappa(df,
                        war_col='WAR',
@@ -17,7 +18,7 @@ def map_blast_to_kappa(df,
                        i_col='i_factor',
                        bigint_guardrail=23,
                        fallback_kappa_for_deep=2,
-                       tol=1e-6):
+                       tol=1e-8):
     """
     Vectorized mapping:
       - computes delta = -log2(blast_radius)  (sublevel)
@@ -91,7 +92,9 @@ def map_blast_to_kappa(df,
 
 df = map_blast_to_kappa(raw_df, war_col='WAR', blast_col='blast_radius', depth_col='depth_d', sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor', bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-6)
 
-bins = range(0, int(df['WAR'].max()) + 100, 100)
+print("suspicious",df['mapping_suspicious'].sum())
+
+bins = range(0, int(df['WAR'].max()) + 50, 50)
 df['binned_WAR'] = pd.cut(df['WAR'], bins=bins)
 war_greater_counts = []
 kappa_equiv_greater_counts = []
@@ -120,3 +123,18 @@ dataplane_dominance = len(df[df['WAR']  < df["kappa_equiv"]])
 print(f"DP dominance {dataplane_dominance}")
 print(f"CP dominance {controlplane_dominance}")
 
+# Filter counterexamples
+counterexamples = df[df['kappa_equiv'] > df['WAR']]
+
+# Select the columns you care about
+counterexamples_summary = counterexamples[['pid','kappa_equiv', 'WAR']]
+
+counterexamples_with_biome = counterexamples_summary.merge(df_biomes[['pid', 'biome_id']], on='pid', how='left')
+
+counterexamples_with_biome = counterexamples_with_biome.reset_index(drop=True)
+
+# Group by biome_id and take the first row to deduplicate
+counterexamples_dedup = counterexamples_with_biome.groupby('biome_id', as_index=False).first()
+
+# Display
+print(counterexamples_dedup)
