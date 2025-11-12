@@ -92,7 +92,9 @@ silhouette.py --single f88b148f-5e7d-4b6a-a9a9-08d1911b1fe2
 
 #### --frs option
 This option generates a file called AZURE_FRS.CSV
-This file has 2 columns: spn pid and (role definition id,level) pair represented as rdid:level. Level is an integer (1 stands for Management Group level, 2 for Subscription level, 3 for Resource Group level). It is a pre-requisite if you want to run the [Azure Fast Fibration Partitioning tool](https://github.com/labyrinthinesecurity/fastFibration) to group your NHIs by fibers.
+This file has 2 columns: spn pid and (role definition id,level) pair represented as rdid:level. Level is an integer (1 stands for Management Group level, 2 for Subscription level, 3 for Resource Group level). 
+
+It also produces another representation of the same information, as a Graph, in a file called AZGRAPH.CSV. This graph is a pre-requisite if you want to run the [Azure Fast Fibration Partitioning tool](https://github.com/labyrinthinesecurity/fastFibration) to group your NHIs by fibers.
 
 To know more about NHI fibers, check out [this article](https://www.linkedin.com/pulse/taming-nhis-azure-aws-part-2-foundations-christophe-parisel-r6dfe/).
 
@@ -212,3 +214,4 @@ Check my data perimeter preprint for full details: [arxiv Data Perimeter](https:
 A permiplet is a way to measure the **impact** of SPN data actions on a given scope, so it's a small, local group of data actions. At a given scope, the permiplet count is always lower or equal to the data actions count.
 
 The notion of impact is explained in the Blast Radius paper.
+
