@@ -1,13 +1,28 @@
 #!/usr/bin/python3
 import numpy as np
 import pandas as pd
+import sys
+
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.max_columns', None)
 
 BIGINT=21
-input_path="sorted_NHIs_2025-08-06.csv"
+input_path="sorted_NHIs_2025-12-03.csv"
 raw_df = pd.read_csv(input_path)
-raw_df=raw_df[raw_df['blast_radius'] > 0.0]
 
-df_biomes = pd.read_csv('sorted_biomes_2025-08-13.csv')
+df_biomes = pd.read_csv('sorted_biomes_2025-12-03.csv')
+
+#print("orig",len(df_biomes))
+df_biomes = df_biomes[df_biomes['name'].str.len() < 64]
+#print("filtered",len(df_biomes))
+filtered_pop = df_biomes.groupby('biome_id')['pid'].transform('count')
+df_biomes['filtered_pop'] = filtered_pop
+
+unique_biome_count = df_biomes['biome_id'].nunique()
+#print(f"Number of unique biome_id values: {unique_biome_count}")
+
+df_biomes = df_biomes.drop_duplicates(subset='biome_id', keep='first')
 
 def map_blast_to_kappa(df,
                        war_col='WAR',
@@ -72,8 +87,8 @@ def map_blast_to_kappa(df,
     # Map; depths above highest known depth get fallback_kappa_for_deep (if < bigint_guardrail)
     kappa_eq = depth_d.map(depth_to_kappa)
 
-    # Fill missing depth mappings with fallback (2)
-    kappa_eq = kappa_eq.fillna(fallback_kappa_for_deep).astype(int)
+    # Fill missing depth mappings with 0 
+    kappa_eq = kappa_eq.fillna(0).astype(int)
 
     # Apply guardrail: if depth >= bigint_guardrail -> set kappa to 0
     kappa_eq = kappa_eq.where(depth_d < bigint_guardrail, other=0)
@@ -92,7 +107,7 @@ def map_blast_to_kappa(df,
 
 df = map_blast_to_kappa(raw_df, war_col='WAR', blast_col='blast_radius', depth_col='depth_d', sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor', bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-6)
 
-print("suspicious",df['mapping_suspicious'].sum())
+#print("suspicious",df['mapping_suspicious'].sum())
 
 bins = range(0, int(df['WAR'].max()) + 50, 50)
 df['binned_WAR'] = pd.cut(df['WAR'], bins=bins)
@@ -101,14 +116,13 @@ kappa_equiv_greater_counts = []
 bin_labels = []
 
 # Iterate over each bin
-for bin_label, group in df.groupby('binned_WAR'):
+for bin_label, group in df.groupby('binned_WAR', observed=True):
     war_greater_count = (group['WAR'] > group['kappa_equiv']).sum()
     kappa_equiv_greater_count = (group['kappa_equiv'] > group['WAR'] ).sum()
     war_greater_counts.append(war_greater_count)
     kappa_equiv_greater_counts.append(kappa_equiv_greater_count)
     bin_labels.append(int(bin_label.right))  # upper bound
 
-# Create a result DataFrame
 result_df = pd.DataFrame({
     'binned_WAR': bin_labels,
     'WAR > kappa_equiv': war_greater_counts,
@@ -124,17 +138,33 @@ print(f"DP dominance {dataplane_dominance}")
 print(f"CP dominance {controlplane_dominance}")
 
 # Filter counterexamples
-counterexamples = df[df['kappa_equiv'] > df['WAR']]
+#counterexamples = df[df['kappa_equiv'] > df['WAR']]
+counterexamples = df
 
-# Select the columns you care about
-counterexamples_summary = counterexamples[['pid','kappa_equiv', 'WAR']]
+counterexamples_summary = counterexamples[['pid','name', 'kappa_equiv', 'WAR']]
 
-counterexamples_with_biome = counterexamples_summary.merge(df_biomes[['pid', 'biome_id']], on='pid', how='left')
+counterexamples_with_biome = counterexamples_summary.merge(df_biomes[['pid', 'biome_id', 'filtered_pop']], on='pid', how='right')
+
+counterexamples_with_biome = counterexamples_with_biome.drop(columns=['pid'])
+
+unique_biome_count = counterexamples_with_biome['biome_id'].nunique()
+print(f"JOIN Number of unique biome_id values: {unique_biome_count}")
+print(f"Rows with NaN biome_id: {counterexamples_with_biome['biome_id'].isna().sum()}")
 
 counterexamples_with_biome = counterexamples_with_biome.reset_index(drop=True)
 
 # Group by biome_id and take the first row to deduplicate
 counterexamples_dedup = counterexamples_with_biome.groupby('biome_id', as_index=False).first()
 
-# Display
-print(counterexamples_dedup)
+
+counterexamples_dedup = counterexamples_dedup.sort_values(by=['WAR', 'filtered_pop', 'kappa_equiv', 'biome_id'],ascending=[False,False,False,True])
+
+counterexamples_dedup['cum_filtered_pop'] = counterexamples_dedup['filtered_pop'].cumsum()
+
+counterexamples_dedup['biome_id'] = counterexamples_dedup['biome_id'].str[:12]
+
+print(counterexamples_dedup.to_string(index=False, line_width=None, justify='left'))
+num_rows = counterexamples_dedup.shape[0]
+num_nhis = df_biomes['filtered_pop'].sum()
+print(f"Number of fibers: {num_rows}")
+print(f"Number of filtered NHIs: {num_nhis}")
