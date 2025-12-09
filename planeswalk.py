@@ -7,21 +7,18 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_columns', None)
 
-BIGINT=21
 input_path="sorted_NHIs_2025-12-03.csv"
 raw_df = pd.read_csv(input_path)
 
 df_biomes = pd.read_csv('sorted_biomes_2025-12-03.csv')
 
-#print("orig",len(df_biomes))
-df_biomes = df_biomes[df_biomes['name'].str.len() < 64]
-#print("filtered",len(df_biomes))
 filtered_pop = df_biomes.groupby('biome_id')['pid'].transform('count')
-df_biomes['filtered_pop'] = filtered_pop
+df_biomes['pop'] = filtered_pop
 
 unique_biome_count = df_biomes['biome_id'].nunique()
-#print(f"Number of unique biome_id values: {unique_biome_count}")
 
+# sort by blast radius to make sure that we keep the highest score in drop_duplicates below (since fibration doesnt preserve blast raddi, we must take the highest one to be conservative)
+df_biomes = df_biomes.sort_values(by='blast_radius', ascending=False)
 df_biomes = df_biomes.drop_duplicates(subset='biome_id', keep='first')
 
 def map_blast_to_kappa(df,
@@ -137,34 +134,54 @@ dataplane_dominance = len(df[df['WAR']  < df["kappa_equiv"]])
 print(f"DP dominance {dataplane_dominance}")
 print(f"CP dominance {controlplane_dominance}")
 
+min_WAR = df['WAR'].min()
+max_WAR = df['WAR'].max()
+
+# Linearize 'WAR' to [0.0, 1000.0]
+df['linearized_WAR'] = 1000 * (df['WAR'] - min_WAR) / (max_WAR - min_WAR)
+df['linearized_WAR'] = df['linearized_WAR']**2
+
+min_ke = df['kappa_equiv'].min()
+max_ke = df['kappa_equiv'].max()
+
+# Linearize 'kappa_equiv' to [0.0, 1000.0]
+df['linearized_ke'] = 1000 * (df['kappa_equiv'] - min_ke) / (max_ke - min_ke)
+df['linearized_ke'] = df['linearized_ke']**2
+
+df['combined'] = df['linearized_ke'] + df['linearized_WAR']
+df['combined'] = df['combined'].round().astype(int)
+
 # Filter counterexamples
 #counterexamples = df[df['kappa_equiv'] > df['WAR']]
 counterexamples = df
 
-counterexamples_summary = counterexamples[['pid','name', 'kappa_equiv', 'WAR']]
+counterexamples_summary = counterexamples[['pid','name', 'kappa_equiv', 'WAR', 'combined']]
 
-counterexamples_with_biome = counterexamples_summary.merge(df_biomes[['pid', 'biome_id', 'filtered_pop']], on='pid', how='right')
+counterexamples_with_biome = counterexamples_summary.merge(df_biomes[['pid', 'biome_id', 'pop']], on='pid', how='right')
 
 counterexamples_with_biome = counterexamples_with_biome.drop(columns=['pid'])
 
 unique_biome_count = counterexamples_with_biome['biome_id'].nunique()
-print(f"JOIN Number of unique biome_id values: {unique_biome_count}")
-print(f"Rows with NaN biome_id: {counterexamples_with_biome['biome_id'].isna().sum()}")
 
 counterexamples_with_biome = counterexamples_with_biome.reset_index(drop=True)
 
 # Group by biome_id and take the first row to deduplicate
 counterexamples_dedup = counterexamples_with_biome.groupby('biome_id', as_index=False).first()
 
+#counterexamples_dedup['score'] = counterexamples_dedup['WAR'] + counterexamples_dedup['kappa_equiv']
 
-counterexamples_dedup = counterexamples_dedup.sort_values(by=['WAR', 'filtered_pop', 'kappa_equiv', 'biome_id'],ascending=[False,False,False,True])
+counterexamples_dedup = counterexamples_dedup.sort_values(by=['combined', 'WAR', 'kappa_equiv', 'pop', 'biome_id'],ascending=[False,False,False,False,True])
 
-counterexamples_dedup['cum_filtered_pop'] = counterexamples_dedup['filtered_pop'].cumsum()
+counterexamples_dedup = counterexamples_dedup.reset_index(drop=True)
+counterexamples_dedup.index = counterexamples_dedup.index + 1  # Start index from 1
+
+counterexamples_dedup['cum_pop'] = counterexamples_dedup['pop'].cumsum()
+counterexamples_dedup['percentile'] = counterexamples_dedup['combined'].rank(pct=True) * 100
 
 counterexamples_dedup['biome_id'] = counterexamples_dedup['biome_id'].str[:12]
 
-print(counterexamples_dedup.to_string(index=False, line_width=None, justify='left'))
+print(counterexamples_dedup.to_string(index=True, line_width=None, justify='left'))
 num_rows = counterexamples_dedup.shape[0]
-num_nhis = df_biomes['filtered_pop'].sum()
+num_nhis = df_biomes['pop'].sum()
 print(f"Number of fibers: {num_rows}")
-print(f"Number of filtered NHIs: {num_nhis}")
+print(f"Number of NHIs: {num_nhis}")
