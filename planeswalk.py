@@ -1,16 +1,19 @@
 #!/usr/bin/python3
 import numpy as np
 import pandas as pd
+import argparse
 import sys
+
+parser = argparse.ArgumentParser(description='Read data as of a specific date.')
+parser.add_argument('--asof', type=str, required=True, help='Date in YYYY-MM-DD format')
+args = parser.parse_args()
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_columns', None)
 
-input_path="sorted_NHIs_2025-12-03.csv"
-raw_df = pd.read_csv(input_path)
-
-df_biomes = pd.read_csv('sorted_biomes_2025-12-03.csv')
+df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
+df_biomes = pd.read_csv(f'sorted_biomes_{args.asof}.csv')
 
 filtered_pop = df_biomes.groupby('biome_id')['pid'].transform('count')
 df_biomes['pop'] = filtered_pop
@@ -102,7 +105,7 @@ def map_blast_to_kappa(df,
 
     return df
 
-df = map_blast_to_kappa(raw_df, war_col='WAR', blast_col='blast_radius', depth_col='depth_d', sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor', bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-6)
+df = map_blast_to_kappa(df_nhis, war_col='WAR', blast_col='blast_radius', depth_col='depth_d', sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor', bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-6)
 
 #print("suspicious",df['mapping_suspicious'].sum())
 
