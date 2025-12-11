@@ -24,7 +24,7 @@ Silhouette now includes **NHI Rank**, located in the `NHI_rank/` subdirectory.
   - percentile group  
 
 This makes it easy to **identify the most critical identities**, even with tens of thousands of NHIs.  
-The compression comes from *fibration theory*: NHIs with identical privilege structures collapse into the same fiber, yielding an extremely compact risk topology.
+The compression comes from [fibration theory](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5742402): NHIs with identical privilege structures collapse into the same fiber, yielding an extremely compact risk topology.
 
 ### Running NHI Rank
 
