@@ -15,27 +15,48 @@ from sklearn.cluster import DBSCAN
 import sys
 from datetime import datetime
 
-current_date = datetime.now()
-timestamp = current_date.strftime("%Y-%m-%d")
-timestamp = "2025-12-08"
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--synthetic', required=False, action="store_true", help='include dbscan metoid fibers')
+parser.add_argument('--synthetic', required=False, action="store_true", help='include dbscan method fibers')
+parser.add_argument('--asof', type=str, required=False, help='set the timestamp to a specific date (format: YYYY-MM-DD)')
+parser.add_argument('--fr', type=str, required=False, help='start date for processing (format: YYYY-MM-DD)')
+parser.add_argument('--to', type=str, required=False, help='end date for processing (format: YYYY-MM-DD)')
 args = parser.parse_args()
 
-warpermdict={}
-spnscache={}
-spn={}
-fiber={}
-pid_dict={}
-rdid_dict={}
-groups={}
-group={}
+# Validate --asof and --fr/--to are not used together
+if args.asof and (args.fr or args.to):
+    print("ERROR: Cannot use --asof with --fr or --to.")
+    sys.exit(1)
 
-pid_dict = {}
-rdid_dict = {}
-reverse_pid_dict = {}
-reverse_rdid_dict = {}
+# Validate --fr and --to
+if (args.fr is None) != (args.to is None):
+    print("ERROR: Both --fr and --to must be provided together.")
+    sys.exit(1)
+
+# Set timestamp logic
+if args.asof:
+    try:
+        timestamp = datetime.strptime(args.asof, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        print("ERROR: Invalid date format for --asof. Use YYYY-MM-DD.")
+        sys.exit(1)
+    timestamps = [timestamp]
+elif args.fr and args.to:
+    try:
+        fr_date = datetime.strptime(args.fr, "%Y-%m-%d")
+        to_date = datetime.strptime(args.to, "%Y-%m-%d")
+        if fr_date > to_date:
+            print("ERROR: --fr date must be before or equal to --to date.")
+            sys.exit(1)
+    except ValueError:
+        print("ERROR: Invalid date format for --fr or --to. Use YYYY-MM-DD.")
+        sys.exit(1)
+    delta = to_date - fr_date
+    timestamps = [(fr_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(delta.days + 1)]
+else:
+    current_date = datetime.now()
+    timestamp = current_date.strftime("%Y-%m-%d")
+    timestamps = [timestamp]
+
 
 # Get the medoid for each cluster
 def find_medoid(cluster_indices, D):
@@ -62,10 +83,10 @@ def generate_AZGRAPH():
     print(f"ERROR, cannot read sorted_NHIs_{timestamp}.csv ====> please run silhouette.py first")
     sys.exit()
   score_filtered = score_df[['pid', 'name', 'WAR', 'blast_radius']]
-  if os.path.exists('AZURE_FRS.csv'):
-    df = pd.read_csv('AZURE_FRS.csv', usecols=['pid', 'rdid'])
+  if os.path.exists(f'AZURE_FRS_{timestamp}.csv'):
+    df = pd.read_csv(f'AZURE_FRS_{timestamp}.csv', usecols=['pid', 'rdid'])
   else:
-    print("ERROR, cannot read AZURE_FRS.csv ====> please run generate_AZRBAC()")
+    print(f"ERROR, cannot read AZURE_FRS_{timestamp}.csv ====> please run silhouette with --frs option")
     sys.exit()
   c=0
   for p in df['pid']:
@@ -86,7 +107,7 @@ def generate_AZGRAPH():
   df['rdid_unique'] = df['rdid'].apply(lambda x: rdid_dict[x])  # Same for rdid
   df['edgetype'] = 'plus'
   
-  df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv("AZGRAPH.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
+  df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
   pid_to_rdids_list = df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
   pid_to_rdids_dict = pid_to_rdids_list.to_dict()
   hashed = pid_to_rdids_list.apply(hash_rdids).reset_index()
@@ -118,58 +139,79 @@ if os.path.exists('groups_roles.json'):
 else:
   print("ERROR. file groups_roles.json not found. Run silhouette first")
   sys.exit()
-generate_AZGRAPH()
 
-if os.path.exists(f"sorted_fibers_{timestamp}.csv.tmp"):
-  df = pd.read_csv(f"sorted_fibers_{timestamp}.csv.tmp")
-  os.remove('sorted_fibers_{timestamp}.csv.tmp')
+# Process each timestamp
+for timestamp in timestamps:
+    print(f"\nProcessing timestamp: {timestamp}")
+    if not os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
+        #print(f"WARNING: File sorted_NHIs_{timestamp}.csv not found. Skipping...")
+        continue
+    warpermdict={}
+    spnscache={}
+    spn={}
+    fiber={}
+    pid_dict={}
+    rdid_dict={}
+    groups={}
+    group={}
 
-df2 = df[df['pop'] > 1].reset_index(drop=True)
-df = df[df['pop'] == 1].reset_index(drop=True)
+    pid_dict = {}
+    rdid_dict = {}
+    reverse_pid_dict = {}
+    reverse_rdid_dict = {}
 
-df['roles'] = df['roles'].apply(ast.literal_eval) #stringed list to list
-df['roles'] = df['roles'].apply(set) # list to set
-# Encode sets into binary format
-mlb = MultiLabelBinarizer(sparse_output=True)
-X = mlb.fit_transform(df['roles'])
+    generate_AZGRAPH()
 
-# Compute Jaccard distance matrix
-D = pairwise_distances(X.toarray().astype(bool), metric='jaccard')
+    if os.path.exists(f"sorted_fibers_{timestamp}.csv.tmp"):
+      df = pd.read_csv(f"sorted_fibers_{timestamp}.csv.tmp")
+      os.remove('sorted_fibers_{timestamp}.csv.tmp')
 
-#print(df)
+    df2 = df[df['pop'] > 1].reset_index(drop=True)
+    df = df[df['pop'] == 1].reset_index(drop=True)
 
-cl = DBSCAN(metric='precomputed', eps=0.2, min_samples=1)
-df['cluster'] = cl.fit_predict(D)
+    df['roles'] = df['roles'].apply(ast.literal_eval) #stringed list to list
+    df['roles'] = df['roles'].apply(set) # list to set
+    # Encode sets into binary format
+    mlb = MultiLabelBinarizer(sparse_output=True)
+    X = mlb.fit_transform(df['roles'])
 
-#print(df[['roles', 'cluster']])
-cluster_counts = df['cluster'].value_counts()
+    # Compute Jaccard distance matrix
+    D = pairwise_distances(X.toarray().astype(bool), metric='jaccard')
 
-# Add a new column with cluster size for sorting
-df['pop'] = df['cluster'].map(cluster_counts)
+    #print(df)
 
-fiber_medoids = {
-    label: find_medoid(df[df['cluster'] == label].index.tolist(), D)
-    for label in df['cluster'].unique()
-}
+    cl = DBSCAN(metric='precomputed', eps=0.2, min_samples=1)
+    df['cluster'] = cl.fit_predict(D)
 
-# Map medoid hashes to cluster labels
-medoid_hashes = {
-    label: hash_medoid(df.loc[idx, 'roles'])
-    for label, idx in fiber_medoids.items()
-}
+    #print(df[['roles', 'cluster']])
+    cluster_counts = df['cluster'].value_counts()
 
-# Replace fiber_id with medoid hash
-df['fiber_id'] = df['cluster'].map(medoid_hashes)
-df['synth_fiber'] = True
-synth_count = df['fiber_id'].nunique()
-df = df.drop(columns=['cluster'])
-combined_df = pd.concat([df, df2], ignore_index=True)
-combined_df = combined_df.sort_values(by=['pop','WAR','fiber_id','pid'], ascending=[False,False,True,True])
-combined_df.to_csv("sorted_fibers_{timestamp}.csv", index=False)
-print()
-print(f"synthetic fibers: {synth_count}")
-counts = combined_df.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
-residual_singletons = counts[counts == 1].count()
-ratio=int(100.0*float(residual_singletons)/float(len(pid_dict)))
-print(f"residual singletons: {residual_singletons} ({ratio}%)")
+    # Add a new column with cluster size for sorting
+    df['pop'] = df['cluster'].map(cluster_counts)
+
+    fiber_medoids = {
+        label: find_medoid(df[df['cluster'] == label].index.tolist(), D)
+        for label in df['cluster'].unique()
+    }
+
+    # Map medoid hashes to cluster labels
+    medoid_hashes = {
+        label: hash_medoid(df.loc[idx, 'roles'])
+        for label, idx in fiber_medoids.items()
+    }
+
+    # Replace fiber_id with medoid hash
+    df['fiber_id'] = df['cluster'].map(medoid_hashes)
+    df['synth_fiber'] = True
+    synth_count = df['fiber_id'].nunique()
+    df = df.drop(columns=['cluster'])
+    combined_df = pd.concat([df, df2], ignore_index=True)
+    combined_df = combined_df.sort_values(by=['pop','WAR','fiber_id','pid'], ascending=[False,False,True,True])
+    combined_df.to_csv("sorted_fibers_{timestamp}.csv", index=False)
+    print()
+    print(f"synthetic fibers: {synth_count}")
+    counts = combined_df.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
+    residual_singletons = counts[counts == 1].count()
+    ratio=int(100.0*float(residual_singletons)/float(len(pid_dict)))
+    print(f"residual singletons: {residual_singletons} ({ratio}%)")
 

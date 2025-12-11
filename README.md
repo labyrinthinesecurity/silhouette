@@ -40,7 +40,7 @@ ARM_CLIENT_SECRET: the password of your auditor SPN
 ```
 
 ## Run
-To sort your SPNs, run ***silhouette.py*** without options. It will generate *sorted_NHIs.csv* in the local directory. This CSV file will contain all SPN IDs having 'actions' or 'data actions' permissions in your Tenant, along with their associated scores and other useful statistics:
+To sort your SPNs, run ***silhouette.py*** without options. It will generate *sorted_NHIs_timestamp.csv* in the local directory. This CSV file will contain all SPN IDs having 'actions' or 'data actions' permissions in your Tenant, along with their associated scores and other useful statistics:
 - *pid*, the SPN principalID
 - *name*, display name (if any)
 - *type*, typically Application or ManagedIdentity for NHIs
@@ -54,7 +54,7 @@ To sort your SPNs, run ***silhouette.py*** without options. It will generate *so
 WARNING: scanning a large number of SPNs and their groups membership takes a long time, so silhouette.py throttles the number of API calls it makes against Azure. ***Expect the sorting to take at least 2 hours per 10000 SPNs***
 
 ### Sample output
-Here is what a typical WAR scoring will look like in *sorted_NHIs.csv*:
+Here is what a typical WAR scoring will look like in *sorted_NHIs_timestamp.csv*:
 
 ```
 pid,name,type,uras,memberships,WAR,blast_radius,D,A
@@ -91,10 +91,10 @@ silhouette.py --single f88b148f-5e7d-4b6a-a9a9-08d1911b1fe2
 ```
 
 #### --frs option
-This option generates a file called AZURE_FRS.CSV
+This option generates a file called AZURE_FRS_timestamp.CSV
 This file has 2 columns: spn pid and (role definition id,level) pair represented as rdid:level. Level is an integer (1 stands for Management Group level, 2 for Subscription level, 3 for Resource Group level). 
 
-It also produces another representation of the same information, as a Graph, in a file called AZGRAPH.CSV. This graph is a pre-requisite if you want to run the [Azure Fast Fibration Partitioning tool](https://github.com/labyrinthinesecurity/fastFibration) to group your NHIs by fibers.
+It also produces another representation of the same information, as a Graph, in a file called AZGRAPH_timestamp.CSV. This graph is a pre-requisite if you want to run the [Azure Fast Fibration Partitioning tool](https://github.com/labyrinthinesecurity/fastFibration) to group your NHIs by fibers.
 
 To know more about NHI fibers, check out [this article](https://www.linkedin.com/pulse/taming-nhis-azure-aws-part-2-foundations-christophe-parisel-r6dfe/).
 

@@ -922,7 +922,7 @@ def generate_WAR_norms(single,combined):
     del(spn[sd])
   if args.frs:
     headers = ["pid", "rdid"]
-    with open("AZURE_FRS.csv", "w", newline="") as f:
+    with open(f"AZURE_FRS_{current_timestamp}.csv", "w", newline="") as f:
       writer = csv.writer(f)
       writer.writerow(headers)
       for f in frs:
