@@ -54,82 +54,11 @@ def generate_demo_data():
         "National Cybersecurity Operations Center", "International Data Transit Hub",
         "Edge Computing Distribution Network", "Satellite Communications Array",
         "Fiber Optic Backbone Provider", "Wireless Infrastructure Deployment",
-        "Content Delivery Network Prime", "Load Balancing Service Group",
-        "NexusLink Technologies", "AegisFirewall Systems", "TerraByte Infrastructure",
-        "VirtuCore Cloud Solutions", "NebulaNet Services", "IronClad Security Group",
-        "NeuralNet Analytics", "AeroStream Communications", "CryptoGuard Technologies",
-        "InfraSync Networks", "ZenithCloud Corporation", "NexusPoint Infrastructure",
-        "AstraData Systems", "VeloNet Services", "TitanShield Defense",
-        "QuantumLink Technologies", "OmniCore Solutions", "NexusSphere Corp",
-        "ApexData Analytics", "VirtuNet Communications", "NebulaShield Security",
-        "InfraPrime Technologies", "ZenithNet Services", "AstraCloud Infrastructure",
-        "TitanTech Solutions", "OmniGuard Systems", "NexusCore Networks",
-        "ApexSphere Technologies", "VeloData Corporation", "QuantumNet Enterprises",
-        "IronSync Infrastructure", "NeuralShield Defense", "TerraLink Communications",
-        "VirtuPrime Analytics", "NebulaCore Services", "AeroGuard Technologies",
-        "InfraZenith Networks", "ZenithSphere Solutions", "AstraPrime Infrastructure",
-        "TitanNet Services", "OmniLink Technologies", "NexusGuard Systems",
-        "ApexCloud Integration Services", "VectorSphere Data Systems", "CyberLink Defense Grid",
-        "UltraNet Backbone Solutions", "PrimeShield Cyber Operations", "QuantumRelay Networks",
-        "DeepWave Analytics Group", "StratoCore Infrastructure Services", "HyperNet Global Holdings",
-        "NovaSecure Technologies", "TerraScale Network Systems", "PicoData Cloud Services",
-        "CoreLink Cyber Architecture", "InfiniNet Solutions International", "BlueTitan Security Labs",
-        "MetaStream Infrastructure Group", "OrbitData Transit Authority", "CyberNova Operations Center",
-        "TitanCloud Engineering", "Polaris Network Services", "IronGate Secure Systems",
-        "NextPhase Connectivity Corp", "HelixData Cloud Holdings", "OptiNet Performance Group",
-        "StarBridge Communications", "Echelon Cyber Technologies", "PrimeWave Computing",
-        "UltraSecure Network Defense", "MacroLink Infrastructure Alliance", "SkyCore Data Systems",
-        "ZenithCloud Networks", "IonSphere Systems", "EtherGuard Technologies",
-        "AtlasNet Engineering Corp", "CrystalData Infrastructure", "NimbusSecure Defense Group",
-        "QuantumEdge Networking", "RapidStream Carrier Services", "TriAxis Cyber Solutions",
-        "StormGate Communication Systems", "NeutronCore Computing", "VectorNet Cloud Authority",
-        "Proteus Data Security Systems", "Constellation Network Operations", "NetFusion Carrier Group",
-        "OmniScale Cloud Transit", "CipherWave Security Alliance", "ArcNet Infrastructure Division",
-        "Celestial Fiber Systems", "ChronoData Services International", "PillarSecure Communications",
-        "Coronal Network Fabric", "AstraLink Data Exchange", "CyberMatrix Defense Labs",
-        "Tensor Associates", "IronSphere Communications", "SkyGuard Cyber Operations",
-        "MetaCore Infrastructure Partners", "OmniStream Data Grid", "TerraGuard Cloud Defense",
-        "HexaNet Intelligent Networks", "VectorShield Analytics Group", "NeuroPrime Data Systems",
-        "VantaSecure Technologies", "CirrusCore Network Holdings", "CoreWave Transit Services",
-        "OptimaShield Cyber Group", "DeepNet Infrastructure Coalition", "TitanArray Networks",
-        "NovaLink Data Authority", "CelestiCore Cyber Solutions", "OnyxData Defense Systems",
-        "HyperEdge Infrastructure", "PinnacleNet Technologies", "QuantaGuard Security",
-        "CoreNova Cloud Transit", "OmegaSphere Infrastructure", "IronPulse Data Solutions",
-        "AeroNet Unified Systems", "StratoSecure Operations Group", "SkyTensor Network Services",
-        "DigitalNexus Engineering", "MegaShield Cyber Infrastructure", "PrimeCore Network Grid",
-        "CloudAxis Data Solutions", "SentinelWave Security Division", "TriNova Infrastructure Labs",
-        "Plank Systems Group", "NeutronLink Data Exchange", "HelixGuard Defense Grid",
-        "NebulaPulse Communications", "VelocisCloud Engineering", "OmniSphere Network Alliance",
-        "ApexFortress Cyber Systems", "IonNet Infrastructure Group", "MetaSecure Transit Services",
-        "Storm Analytics", "TerraPrime Security Holdings", "HyperCore Distributed Systems",
-        "CirrusGuard Network Defense", "NovaTitan Infrastructure", "ArcSphere Data Technologies",
-        "SkyPulse Communications", "CipherNova Security Solutions", "VectorPrime Cloud Services",
-        "NexusHelix Infrastructure", "DataForge Cyber Operations", "IronOrbit Network Systems",
-        "AeroPrime Data Carriers", "VanguardNet Technologies", "UltraGuard Cloud Security",
-        "OmniVector Network Systems", "NeuroScale Analytics", "QuantumArc Infrastructure",
-        "PrimeSphere Cloud Transit", "EtherNova Systems", "HelixNet Security Group",
-        "NebulaWave Carrier Services", "TitanMatrix Solutions", "ApexIon Cyber Defense",
-        "CoreZen Infrastructure", "StratoNet Cloud Systems", "CelestialGuard Technologies",
-        "HyperLink Transit Solutions", "MetaWave Data Networks", "NovaEdge Communications",
-        "CyberAtlas Defense Systems", "VeloCore Infrastructure Group", "IronClad Secure Networks",
-        "QuantumPulse Data Grid", "AeroMatrix Cloud Services", "NexusQuantum Systems",
-        "PrimeVector Communications", "TerraSync Network Alliance", "OmegaCloud Intelligence",
-        "SkyNova Cyber Defense", "NeuralFlux Data Systems", "InfraSphere Technologies",
-        "CyberPrime Operations Hub", "MetaTensor Networks", "CoreStorm Cloud Division",
-        "VantaCloud Transit", "TerraWave Network Engineering", "QuantumSecure Holdings",
-        "AeroCore Digital Transit", "OmniFlux Cyber Group", "DeltaPrime Infrastructure",
-        "CipherEdge Security Systems", "DeepStream Carrier Grid", "HyperShield Data Services",
-        "NexusFusion Technologies", "IonGuard Defense Systems", "ZenithMatrix Cloud Platforms",
-        "ProtoNet Infrastructure", "NeuroEdge Computing Group", "CelestiNet Data Transit",
-        "PrimeIon Security Labs", "TriVector Network Authority", "GammaHelix Systems",
-        "ArcTitan Cyber Defense", "AeroZen Data Solutions", "Pulse Network Graphs",
-        "TerraGuard Transit Authority", "MetaCore Edge Networks", "VectorStorm Cloud Holdings",
-        "HyperData Infrastructure Group", "Viridis Intelligent Fabrics", "CipherPrimal Division",
-        "Isotope Cloud Carriers",
+        "Content Delivery Network Prime", "Load Balancing Service Group"
     ]
 
-    # Generate 1500 NHIs with varying characteristics
-    n_nhis = 15000
+    # Generate 150 NHIs with varying characteristics
+    n_nhis = 150
     nhis = []
 
     for i in range(n_nhis):
@@ -138,12 +67,11 @@ def generate_demo_data():
             name = f"{name} - Region {i // len(company_names)}"
 
         # Generate blast_radius with power-law distribution (few critical, many minor)
-        #blast_radius = np.random.beta(5, 0.2)  # Skewed toward small values
-        blast_radius = np.random.pareto(0.9999) #+ 0.5 * np.random.beta(5, 0.2)
+        blast_radius = np.random.beta(0.5, 5)  # Skewed toward small values
 
         # WAR (Weighted Attack Risk) - correlated with blast_radius but with noise
-        base_war = int(100 + blast_radius * 500)
-        war = max(0, int(base_war + np.random.normal(0, 300)))
+        base_war = int(100 + blast_radius * 800)
+        war = max(0, int(base_war + np.random.normal(0, 50)))
 
         nhis.append({
             'pid': f'NHI-{i:05d}',
@@ -155,12 +83,12 @@ def generate_demo_data():
     df_nhis = pd.DataFrame(nhis)
 
     # Generate fibers (groups of NHIs with similar characteristics)
-    n_fibers = 250
+    n_fibers = 80
     fibers = []
 
     for fid in range(n_fibers):
         # Each fiber contains 1-5 NHIs
-        n_members = np.random.choice([7, 5, 4, 3, 2, 6], p=[0.35, 0.25, 0.2, 0.1, 0.07, 0.03])
+        n_members = np.random.choice([1, 2, 3, 4, 5], p=[0.5, 0.25, 0.15, 0.07, 0.03])
         member_pids = np.random.choice(df_nhis['pid'].values, size=n_members, replace=False)
 
         for pid in member_pids:
@@ -172,8 +100,6 @@ def generate_demo_data():
 
     df_fibers = pd.DataFrame(fibers)
     df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
-    df_fibers = df_fibers.sort_values(by='blast_radius', ascending=False)
-    df_fibers = df_fibers.drop_duplicates(subset='fiber_id', keep='first')
 
     return df_nhis, df_fibers
 
@@ -186,8 +112,6 @@ else:
     df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
     df_fibers = pd.read_csv(f'sorted_fibers_{args.asof}.csv')
     df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
-    df_fibers = df_fibers.sort_values(by='blast_radius', ascending=False)
-    df_fibers = df_fibers.drop_duplicates(subset='fiber_id', keep='first')
 
 # -----------------------------
 # Map blast_radius to kappa
@@ -239,6 +163,8 @@ counterexamples = df
 counterexamples_summary = counterexamples[['pid','name','kappa_equiv','WAR','combined']]
 counterexamples_with_fiber = counterexamples_summary.merge(df_fibers[['pid','fiber_id','pop']], on='pid', how='right')
 counterexamples_with_fiber = counterexamples_with_fiber.drop(columns=['pid']).reset_index(drop=True)
+# Sort to select the best representative NHI for each fiber (highest combined score)
+counterexamples_with_fiber = counterexamples_with_fiber.sort_values(by=['combined','WAR','kappa_equiv'], ascending=[False,False,False])
 counterexamples_dedup = counterexamples_with_fiber.groupby('fiber_id', as_index=False).first()
 counterexamples_dedup['combined'] = counterexamples_dedup['combined'] + counterexamples_dedup['pop']
 counterexamples_dedup = counterexamples_dedup.sort_values(by=['combined','pop','WAR','kappa_equiv','fiber_id'], ascending=[False,False,False,False,True])
@@ -446,7 +372,7 @@ def interactive_barchart(df):
         curses.curs_set(0)
         stdscr.nodelay(False)
         fibers = sub_df[sub_df['percentile_bin']==bin_idx]
-        fibers_display = fibers[['name','WAR','kappa_equiv','percentile','pop']].reset_index(drop=True)
+        fibers_display = fibers[['fiber_id','WAR','kappa_equiv','percentile','pop']].reset_index(drop=True)
         scroll = 0
 
         while True:
@@ -466,7 +392,7 @@ def interactive_barchart(df):
             stdscr.attroff(curses.color_pair(5))
 
             # Draw header
-            header = "  # NAME                                                             WAR   KE   PERCENTILE  POP"
+            header = "  # FIBER_ID                                                         WAR   KE   PERCENTILE  POP"
             stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
             stdscr.addstr(2, 2, header[:w-4])
             stdscr.addstr(3, 2, "─" * min(len(header), w-4))
@@ -476,7 +402,7 @@ def interactive_barchart(df):
             visible_rows = min(h - 5, len(fibers_display) - scroll)
             for i in range(visible_rows):
                 row = fibers_display.iloc[i + scroll]
-                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['WAR']:4} {row['kappa_equiv']:4}   {row['percentile']:6.2f}  {row['pop']:4}"
+                line = f"{i+scroll+1:3d} {row['fiber_id'][:64]:64s} {row['WAR']:4} {row['kappa_equiv']:4}   {row['percentile']:6.2f}  {row['pop']:4}"
 
                 # Alternate row colors for readability
                 if i % 2 == 0:
