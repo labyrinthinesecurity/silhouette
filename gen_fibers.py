@@ -13,7 +13,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import pairwise_distances
 from sklearn.cluster import DBSCAN
 import sys
-from datetime import datetime
+from datetime import datetime,timedelta
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--synthetic', required=False, action="store_true", help='include dbscan method fibers')
@@ -80,13 +80,13 @@ def generate_AZGRAPH():
   if os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
     score_df = pd.read_csv(f'sorted_NHIs_{timestamp}.csv')
   else:
-    print(f"ERROR, cannot read sorted_NHIs_{timestamp}.csv ====> please run silhouette.py first")
+    print(f"  ERROR, cannot read sorted_NHIs_{timestamp}.csv ====> please run silhouette.py first")
     sys.exit()
   score_filtered = score_df[['pid', 'name', 'WAR', 'blast_radius']]
   if os.path.exists(f'AZURE_FRS_{timestamp}.csv'):
     df = pd.read_csv(f'AZURE_FRS_{timestamp}.csv', usecols=['pid', 'rdid'])
   else:
-    print(f"ERROR, cannot read AZURE_FRS_{timestamp}.csv ====> please run silhouette with --frs option")
+    print(f"  ERROR, cannot read AZURE_FRS_{timestamp}.csv ====> please run silhouette with --frs option")
     sys.exit()
   c=0
   for p in df['pid']:
@@ -119,17 +119,17 @@ def generate_AZGRAPH():
   hashed['synth_fiber'] = False
   hashed = hashed[['fiber_id', 'pop', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
   hashed = hashed.sort_values(by=['pop','WAR', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
-  print(f"unique PIDs: {len(pid_dict)}, unique scoped role definitions: {len(rdid_dict)}")
+  print(f"  unique PIDs: {len(pid_dict)}, unique scoped role definitions: {len(rdid_dict)}")
   unique_fibers_count = hashed['fiber_id'].nunique()
-  print(f"unique fibers: {unique_fibers_count}")
+  print(f"  unique fibers: {unique_fibers_count}")
   counts = hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
   singletons = counts[counts == 1].count()
   ratio=int(100.0*float(singletons)/float(len(pid_dict)))
-  print(f"singleton PIDs: {singletons} ({ratio}%)")
+  print(f"  singleton PIDs: {singletons} ({ratio}%)")
   if args.synthetic:
     hashed.to_csv(f"sorted_fibers_{timestamp}.csv.tmp", index=False)
   else:
-    print(hashed.head())
+    #print(hashed.head())
     hashed.to_csv(f"sorted_fibers_{timestamp}.csv", index=False)
     sys.exit()
 
@@ -140,9 +140,11 @@ else:
   print("ERROR. file groups_roles.json not found. Run silhouette first")
   sys.exit()
 
+print()
+
 # Process each timestamp
 for timestamp in timestamps:
-    print(f"\nProcessing timestamp: {timestamp}")
+    print(f"Processing timestamp: {timestamp}")
     if not os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
         #print(f"WARNING: File sorted_NHIs_{timestamp}.csv not found. Skipping...")
         continue
@@ -208,10 +210,10 @@ for timestamp in timestamps:
     combined_df = pd.concat([df, df2], ignore_index=True)
     combined_df = combined_df.sort_values(by=['pop','WAR','fiber_id','pid'], ascending=[False,False,True,True])
     combined_df.to_csv("sorted_fibers_{timestamp}.csv", index=False)
-    print()
-    print(f"synthetic fibers: {synth_count}")
+    #print()
+    print(f"  synthetic fibers: {synth_count}")
     counts = combined_df.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
     residual_singletons = counts[counts == 1].count()
     ratio=int(100.0*float(residual_singletons)/float(len(pid_dict)))
-    print(f"residual singletons: {residual_singletons} ({ratio}%)")
+    print(f"  residual singletons: {residual_singletons} ({ratio}%)")
 
