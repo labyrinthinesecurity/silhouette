@@ -181,7 +181,7 @@ counterexamples_dedup['percentile_bin'] = (counterexamples_dedup['percentile'] %
 # -----------------------------
 # Interactive curses UI
 # -----------------------------
-def interactive_barchart(df):
+def interactive_barchart(df, df_full):
     def root_screen(stdscr):
         curses.curs_set(0)
         stdscr.nodelay(False)
@@ -267,7 +267,7 @@ def interactive_barchart(df):
             stdscr.refresh()
             c = stdscr.getch()
             if c in (ord('q'), ord('Q')):
-                return
+                sys.exit(0)
             if ord('0') <= c <= ord('9'):
                 percentile_screen(stdscr, c - ord('0'))
 
@@ -282,7 +282,7 @@ def interactive_barchart(df):
                 stdscr.clear()
                 h,w = stdscr.getmaxyx()
                 msg = f"╔══ Decile {decile} is empty ══╗"
-                help_msg = "Press ESC to return"
+                help_msg = "Press ESC to return │ Q to quit"
                 stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
                 stdscr.addstr(h//2 - 1, max(0, (w - len(msg)) // 2), msg)
                 stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
@@ -290,7 +290,10 @@ def interactive_barchart(df):
                 stdscr.addstr(h//2 + 1, max(0, (w - len(help_msg)) // 2), help_msg)
                 stdscr.attroff(curses.color_pair(5))
                 stdscr.refresh()
-                if stdscr.getch() == 27:
+                c = stdscr.getch()
+                if c in (ord('q'), ord('Q')):
+                    sys.exit(0)
+                if c == 27:
                     return
 
         hist = sub['percentile_bin'].value_counts().reindex(range(10), fill_value=0).to_numpy()
@@ -363,6 +366,8 @@ def interactive_barchart(df):
 
             stdscr.refresh()
             c = stdscr.getch()
+            if c in (ord('q'), ord('Q')):
+                sys.exit(0)
             if c == 27:
                 return
             if ord('0') <= c <= ord('9'):
@@ -374,6 +379,7 @@ def interactive_barchart(df):
         fibers = sub_df[sub_df['percentile_bin']==bin_idx]
         fibers_display = fibers[['fiber_id','WAR','kappa_equiv','percentile','pop']].reset_index(drop=True)
         scroll = 0
+        selected_index = 0  # Track which fiber is selected
 
         while True:
             stdscr.clear()
@@ -386,13 +392,13 @@ def interactive_barchart(df):
             stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
 
             # Draw help text
-            help_text = "↑↓ to scroll │ ESC to go back"
+            help_text = "↑↓ to select │ SPACE for NHI details │ ESC to go back │ Q to quit"
             stdscr.attron(curses.color_pair(5))
             stdscr.addstr(1, max(0, (w - len(help_text)) // 2), help_text)
             stdscr.attroff(curses.color_pair(5))
 
             # Draw header
-            header = "  # FIBER_ID                                                         WAR   KE   PERCENTILE  POP"
+            header = "  # FIBER_ID      REPRESENTATIVE                                                   WAR KE   PERCENTILE   POP"
             stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
             stdscr.addstr(2, 2, header[:w-4])
             stdscr.addstr(3, 2, "─" * min(len(header), w-4))
@@ -401,8 +407,120 @@ def interactive_barchart(df):
             # Draw fibers with alternating colors
             visible_rows = min(h - 5, len(fibers_display) - scroll)
             for i in range(visible_rows):
-                row = fibers_display.iloc[i + scroll]
-                line = f"{i+scroll+1:3d} {row['fiber_id'][:64]:64s} {row['WAR']:4} {row['kappa_equiv']:4}   {row['percentile']:6.2f}  {row['pop']:4}"
+                absolute_index = i + scroll
+                row = fibers_display.iloc[absolute_index]
+                current_fiber_id_truncated = fibers_display.iloc[absolute_index]['fiber_id']
+                current_fiber_nhis = df_full[df_full['fiber_id'].str.startswith(current_fiber_id_truncated)]
+                first_nhi_name = current_fiber_nhis['name'].iloc[0] if not current_fiber_nhis.empty else "N/A"
+                line = f"{absolute_index+1:3d} {row['fiber_id'][:13]:13s} {first_nhi_name[:64]:64} {row['WAR']:3} {row['kappa_equiv']:3}   {row['percentile']:6.2f}  {row['pop']:5}"
+
+                # Determine if this is the selected row
+                is_selected = (absolute_index == selected_index)
+
+                if is_selected:
+                    # Highlight selected row with reverse video
+                    stdscr.attron(curses.color_pair(5) | curses.A_REVERSE)
+                elif i % 2 == 0:
+                    stdscr.attron(curses.color_pair(5))
+                else:
+                    stdscr.attron(curses.color_pair(5) | curses.A_DIM)
+
+                stdscr.addstr(i + 4, 2, line[:w-4])
+
+                if is_selected:
+                    stdscr.attroff(curses.color_pair(5) | curses.A_REVERSE)
+                else:
+                    stdscr.attroff(curses.color_pair(5) | curses.A_DIM)
+
+            # Draw scroll indicator
+            if len(fibers_display) > visible_rows:
+                scroll_info = f"[{scroll+1}-{scroll+visible_rows} of {len(fibers_display)}]"
+                stdscr.attron(curses.color_pair(6))
+                stdscr.addstr(h - 1, w - len(scroll_info) - 2, scroll_info)
+                stdscr.attroff(curses.color_pair(6))
+
+            stdscr.refresh()
+            c = stdscr.getch()
+
+            if c in (ord('q'), ord('Q')):
+                sys.exit(0)
+            elif c == 27:  # ESC
+                return
+            elif c == ord(' '):  # SPACE
+                # Get the selected fiber's fiber_id (need to reconstruct the full ID)
+                selected_fiber_id = fibers_display.iloc[selected_index]['fiber_id']
+                nhi_detail_screen(stdscr, selected_fiber_id, decile, bin_idx)
+            elif c == curses.KEY_DOWN:
+                if selected_index < len(fibers_display) - 1:
+                    selected_index += 1
+                    # Auto-scroll if selection goes below visible area
+                    if selected_index >= scroll + visible_rows:
+                        scroll = selected_index - visible_rows + 1
+            elif c == curses.KEY_UP:
+                if selected_index > 0:
+                    selected_index -= 1
+                    # Auto-scroll if selection goes above visible area
+                    if selected_index < scroll:
+                        scroll = selected_index
+
+    def nhi_detail_screen(stdscr, fiber_id_truncated, decile, bin_idx):
+        """Display all NHIs belonging to a specific fiber."""
+        curses.curs_set(0)
+        stdscr.nodelay(False)
+
+        # Find all NHIs in this fiber (fiber_id is truncated in display, so match by prefix)
+        fiber_nhis = df_full[df_full['fiber_id'].str.startswith(fiber_id_truncated)]
+
+        if fiber_nhis.empty:
+            while True:
+                stdscr.clear()
+                h, w = stdscr.getmaxyx()
+                msg = f"╔══ No NHIs found for fiber {fiber_id_truncated} ══╗"
+                help_msg = "Press ESC to return │ Q to quit"
+                stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+                stdscr.addstr(h//2 - 1, max(0, (w - len(msg)) // 2), msg)
+                stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+                stdscr.attron(curses.color_pair(5))
+                stdscr.addstr(h//2 + 1, max(0, (w - len(help_msg)) // 2), help_msg)
+                stdscr.attroff(curses.color_pair(5))
+                stdscr.refresh()
+                c = stdscr.getch()
+                if c in (ord('q'), ord('Q')):
+                    sys.exit(0)
+                if c == 27:
+                    return
+
+        nhis_display = fiber_nhis[['name', 'WAR', 'kappa_equiv', 'combined']].reset_index(drop=True)
+        scroll = 0
+
+        while True:
+            stdscr.clear()
+            h, w = stdscr.getmaxyx()
+
+            # Draw title
+            title = f"╔══ NHIs IN FIBER {fiber_id_truncated} ══╗"
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(0, max(0, (w - len(title)) // 2), title)
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+
+            # Draw help text
+            help_text = "↑↓ to scroll │ ESC to go back │ Q to quit"
+            stdscr.attron(curses.color_pair(5))
+            stdscr.addstr(1, max(0, (w - len(help_text)) // 2), help_text)
+            stdscr.attroff(curses.color_pair(5))
+
+            # Draw header
+            header = "  # NHI NAME                                                         WAR   KE   COMBINED"
+            stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
+            stdscr.addstr(2, 2, header[:w-4])
+            stdscr.addstr(3, 2, "─" * min(len(header), w-4))
+            stdscr.attroff(curses.color_pair(6) | curses.A_BOLD)
+
+            # Draw NHIs with alternating colors
+            visible_rows = min(h - 5, len(nhis_display) - scroll)
+            for i in range(visible_rows):
+                row = nhis_display.iloc[i + scroll]
+                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['WAR']:4} {row['kappa_equiv']:4}   {row['combined']:8}"
 
                 # Alternate row colors for readability
                 if i % 2 == 0:
@@ -414,17 +532,26 @@ def interactive_barchart(df):
                 stdscr.attroff(curses.color_pair(5) | curses.A_DIM)
 
             # Draw scroll indicator
-            if len(fibers_display) > visible_rows:
-                scroll_info = f"[{scroll+1}-{scroll+visible_rows} of {len(fibers_display)}]"
+            if len(nhis_display) > visible_rows:
+                scroll_info = f"[{scroll+1}-{scroll+visible_rows} of {len(nhis_display)}]"
                 stdscr.attron(curses.color_pair(6))
                 stdscr.addstr(h - 1, w - len(scroll_info) - 2, scroll_info)
                 stdscr.attroff(curses.color_pair(6))
 
+            # Show total count
+            count_info = f"Total NHIs: {len(nhis_display)}"
+            stdscr.attron(curses.color_pair(6))
+            stdscr.addstr(h - 1, 2, count_info)
+            stdscr.attroff(curses.color_pair(6))
+
             stdscr.refresh()
             c = stdscr.getch()
-            if c == 27:
+
+            if c in (ord('q'), ord('Q')):
+                sys.exit(0)
+            elif c == 27:  # ESC
                 return
-            elif c == curses.KEY_DOWN and scroll < len(fibers_display) - visible_rows:
+            elif c == curses.KEY_DOWN and scroll < len(nhis_display) - visible_rows:
                 scroll += 1
             elif c == curses.KEY_UP and scroll > 0:
                 scroll -= 1
@@ -435,7 +562,7 @@ def interactive_barchart(df):
 # Launch interactive mode
 # -----------------------------
 if args.interactive:
-    interactive_barchart(counterexamples_dedup)
+    interactive_barchart(counterexamples_dedup, counterexamples_with_fiber)
     sys.exit(0)
 
 # -----------------------------
@@ -443,7 +570,7 @@ if args.interactive:
 # -----------------------------
 print(counterexamples_dedup.to_string(index=True, line_width=None, justify='left'))
 num_rows = counterexamples_dedup.shape[0]
-num_nhis = df_fibers['pop'].sum()
+num_nhis = counterexamples_dedup['cum_pop'].iloc[-1]
 print(f"Number of fibers: {num_rows}")
 print(f"Number of NHIs: {num_nhis}")
 
