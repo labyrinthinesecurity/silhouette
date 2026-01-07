@@ -116,58 +116,66 @@ else:
 # -----------------------------
 # Map blast_radius to kappa
 # -----------------------------
-def map_blast_to_kappa(df, war_col='WAR', blast_col='blast_radius', depth_col='depth_d',
-                       sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor',
+def map_blast_to_kappa(df, blast_col='blast_radius', depth_col='depth_d',
+                       sublevel_col='delta_sublevel', i_col='i_factor',
                        bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-8):
-    df = df.copy()
+    delta_col='kappa_equiv'
+    strict_df = df.copy()
+    strict_df['kappa'] = np.where(df['WAR'] >= 900, 699,
+                         np.where(df['WAR'] >= 800, 588,
+                         np.where(df['WAR'] >= 700, 477,
+                         df['WAR'])))
+    kappa_col='kappa'
+    df = strict_df.copy()
     br = df[blast_col].astype(float).copy()
-    invalid_mask = br.isna() | (br <= 0) | (br > 1)
+    #invalid_mask = br.isna() | (br <= 0) | (br > 1)
     br_nonzero = br.replace(0, np.nan)
     with np.errstate(divide='ignore', invalid='ignore'):
         delta_float = -np.log2(br_nonzero)
     sentinel = 2 * bigint_guardrail
     delta_float = delta_float.fillna(sentinel)
     delta_sublevel = np.rint(delta_float).astype(int)
-    deviation = np.abs(delta_float - delta_sublevel)
-    suspicious = (deviation > tol) | invalid_mask
+    #deviation = np.abs(delta_float - delta_sublevel)
+    #suspicious = (deviation > tol) | invalid_mask
     depth_d = (delta_sublevel // 2).astype(int)
     i_factor = np.where(delta_sublevel % 2 == 1, 1, 2)
-    depth_to_kappa = {0:900,1:800,2:700,3:407,4:306,5:204,6:102,7:2}
+    #depth_to_kappa = {0:900,1:800,2:700,3:407,4:306,5:204,6:102,7:2}
+    depth_to_kappa = {0:699,1:588,2:477,3:366,4:244,5:122,6:2}
     kappa_eq = depth_d.map(depth_to_kappa).fillna(0).astype(int)
     kappa_eq = kappa_eq.where(depth_d < bigint_guardrail, other=0)
     df[sublevel_col] = delta_sublevel
     df[depth_col] = depth_d
     df[i_col] = i_factor
-    df[kappa_col] = kappa_eq
-    df['mapping_suspicious'] = suspicious
-    df['ctrl_max_flag'] = (df[war_col] > df[kappa_col]) & (~df['mapping_suspicious'])
+    df[delta_col] = kappa_eq
+    #df['mapping_suspicious'] = suspicious
+    df['ctrl_max_flag'] = (df[kappa_col] > df[delta_col]) # & (~df['mapping_suspicious'])
     return df
 
-df = map_blast_to_kappa(df_nhis, war_col='WAR', blast_col='blast_radius', depth_col='depth_d',
-                        sublevel_col='delta_sublevel', kappa_col='kappa_equiv', i_col='i_factor',
+df = map_blast_to_kappa(df_nhis, blast_col='blast_radius', depth_col='depth_d',
+                        sublevel_col='delta_sublevel', i_col='i_factor',
                         bigint_guardrail=23, fallback_kappa_for_deep=2, tol=1e-6)
 
 # -----------------------------
 # Linearize WAR and kappa
 # -----------------------------
-min_WAR,max_WAR = df['WAR'].min(), df['WAR'].max()
-df['linearized_WAR'] = ((1000*(df['WAR']-min_WAR)/(max_WAR-min_WAR))**2)
+min_WAR,max_WAR = df['kappa'].min(), df['kappa'].max()
+df['linearized_kappa'] = ((699*(df['kappa']-min_WAR)/(max_WAR-min_WAR))**2)
 min_ke,max_ke = df['kappa_equiv'].min(), df['kappa_equiv'].max()
-df['linearized_ke'] = ((1000*(df['kappa_equiv']-min_ke)/(max_ke-min_ke))**2)
-df['combined'] = (df['linearized_ke'] + df['linearized_WAR']).round().astype(int)
+df['linearized_ke'] = ((699*(df['kappa_equiv']-min_ke)/(max_ke-min_ke))**2)
+df['combined'] = (df['linearized_ke'] + df['linearized_kappa']).round().astype(int)
 
 # -----------------------------
 # Counterexamples and fiber info
 # -----------------------------
 counterexamples = df
-counterexamples_summary = counterexamples[['pid','name','kappa_equiv','WAR','combined']]
+counterexamples_summary = counterexamples[['pid','name','kappa_equiv','kappa','combined']]
 counterexamples_with_fiber = counterexamples_summary.merge(df_fibers[['pid','fiber_id','pop']], on='pid', how='right')
 counterexamples_with_fiber = counterexamples_with_fiber.drop(columns=['pid']).reset_index(drop=True)
 # Sort to select the best representative NHI for each fiber (highest combined score)
-counterexamples_with_fiber = counterexamples_with_fiber.sort_values(by=['combined','WAR','kappa_equiv'], ascending=[False,False,False])
+counterexamples_with_fiber = counterexamples_with_fiber.sort_values(by=['combined','kappa','kappa_equiv'], ascending=[False,False,False])
 counterexamples_dedup = counterexamples_with_fiber.groupby('fiber_id', as_index=False).first()
 counterexamples_dedup['combined'] = counterexamples_dedup['combined'] + counterexamples_dedup['pop']
-counterexamples_dedup = counterexamples_dedup.sort_values(by=['combined','pop','WAR','kappa_equiv','fiber_id'], ascending=[False,False,False,False,True])
+counterexamples_dedup = counterexamples_dedup.sort_values(by=['combined','pop','kappa','kappa_equiv','fiber_id'], ascending=[False,False,False,False,True])
 counterexamples_dedup = counterexamples_dedup.reset_index(drop=True)
 counterexamples_dedup.index += 1
 counterexamples_dedup['cum_pop'] = counterexamples_dedup['pop'].cumsum()
@@ -377,7 +385,7 @@ def interactive_barchart(df, df_full):
         curses.curs_set(0)
         stdscr.nodelay(False)
         fibers = sub_df[sub_df['percentile_bin']==bin_idx]
-        fibers_display = fibers[['fiber_id','WAR','kappa_equiv','percentile','pop']].reset_index(drop=True)
+        fibers_display = fibers[['fiber_id','kappa','kappa_equiv','percentile','pop']].reset_index(drop=True)
         scroll = 0
         selected_index = 0  # Track which fiber is selected
 
@@ -398,7 +406,7 @@ def interactive_barchart(df, df_full):
             stdscr.attroff(curses.color_pair(5))
 
             # Draw header
-            header = "  # FIBER_ID      REPRESENTATIVE                                                   WAR KE   PERCENTILE   POP"
+            header = "  # FIBER_ID      REPRESENTATIVE NHI                                               KAPPA  DELTA  PERCENTILE POP"
             stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
             stdscr.addstr(2, 2, header[:w-4])
             stdscr.addstr(3, 2, "─" * min(len(header), w-4))
@@ -412,7 +420,7 @@ def interactive_barchart(df, df_full):
                 current_fiber_id_truncated = fibers_display.iloc[absolute_index]['fiber_id']
                 current_fiber_nhis = df_full[df_full['fiber_id'].str.startswith(current_fiber_id_truncated)]
                 first_nhi_name = current_fiber_nhis['name'].iloc[0] if not current_fiber_nhis.empty else "N/A"
-                line = f"{absolute_index+1:3d} {row['fiber_id'][:13]:13s} {first_nhi_name[:64]:64} {row['WAR']:3} {row['kappa_equiv']:3}   {row['percentile']:6.2f}  {row['pop']:5}"
+                line = f"{absolute_index+1:3d} {row['fiber_id'][:13]:13s} {first_nhi_name[:64]:64} {row['kappa']:3}    {row['kappa_equiv']:3}   {row['percentile']:6.2f}  {row['pop']:5}"
 
                 # Determine if this is the selected row
                 is_selected = (absolute_index == selected_index)
@@ -490,7 +498,7 @@ def interactive_barchart(df, df_full):
                 if c == 27:
                     return
 
-        nhis_display = fiber_nhis[['name', 'WAR', 'kappa_equiv', 'combined']].reset_index(drop=True)
+        nhis_display = fiber_nhis[['name', 'kappa', 'kappa_equiv', 'combined']].reset_index(drop=True)
         scroll = 0
 
         while True:
@@ -510,7 +518,7 @@ def interactive_barchart(df, df_full):
             stdscr.attroff(curses.color_pair(5))
 
             # Draw header
-            header = "  # NHI NAME                                                         WAR   KE   COMBINED"
+            header = "  # NHI NAME                                                          KAPPA  DELTA   COMBINED"
             stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
             stdscr.addstr(2, 2, header[:w-4])
             stdscr.addstr(3, 2, "─" * min(len(header), w-4))
@@ -520,7 +528,7 @@ def interactive_barchart(df, df_full):
             visible_rows = min(h - 5, len(nhis_display) - scroll)
             for i in range(visible_rows):
                 row = nhis_display.iloc[i + scroll]
-                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['WAR']:4} {row['kappa_equiv']:4}   {row['combined']:8}"
+                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['kappa']:4}   {row['kappa_equiv']:4}   {row['combined']:8}"
 
                 # Alternate row colors for readability
                 if i % 2 == 0:
