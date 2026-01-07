@@ -576,6 +576,8 @@ if args.interactive:
 # -----------------------------
 # Print summary table if not interactive
 # -----------------------------
+counterexamples_dedup=counterexamples_dedup.drop(columns=["decile","percentile_bin","combined"])
+counterexamples_dedup=counterexamples_dedup.rename(columns={'name':'NHI representative','kappa_equiv':'delta'})
 print(counterexamples_dedup.to_string(index=True, line_width=None, justify='left'))
 num_rows = counterexamples_dedup.shape[0]
 num_nhis = counterexamples_dedup['cum_pop'].iloc[-1]
