@@ -985,7 +985,7 @@ def generate_WAR_norms(single,combined):
     scores2csv(spn) 
 
 def az_ad_sp(token=None):
-  print("retrieving all your SPNs from Entra... Please be patient, il will take a few minutes")
+  print("retrieving all your SPNs from Entra... Please be patient, it will take a few minutes")
   if not token:
     token = get_token('graph.microsoft.com')
   url = 'https://graph.microsoft.com/v1.0/servicePrincipals'  

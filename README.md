@@ -1,7 +1,7 @@
 # Azure Silhouette, a SPN sorter and roles minimizer
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/silhouette_logo_ultrametry.png" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.2/silhouette_logo_fibration.png" width="50%">
 </div>
 
 # NHI Rank (new)
@@ -213,7 +213,7 @@ Data Plane scores are generated with the help of a new distance called the *blas
 In the data plane, you may also calculate the *data perimeter* of your NHIs. It provides a high resolution contour of your SPN's data action, complementing the blast radius nicely in advanced prioritization scenarios.
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/rbac_distance.jpeg" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.2/rbac_distance.jpeg" width="50%">
 </div>
 
 ## Pre-requisites
@@ -331,7 +331,7 @@ Here are a few examples of silhouette configurations based on the WAR norm table
 - 000 corresponds to no control plane rights (except IAM roles management, as explained above)
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/WARnormTable.PNG">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.2/WARnormTable.PNG">
 </div>
 
 ### Data plane scores
@@ -339,7 +339,7 @@ The blast radius leverages the native clustering hierarchy of resources manageme
 The ultrametric maximum represents the largest lateral motion a SPN can perform across your data plane, hence its name: blast radius. This is useful to assess the extent of potential data leakages or data forgeries.
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius.png" width="70%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.2/blast_radius.png" width="70%">
 </div>
 
 #### Example
@@ -347,7 +347,7 @@ The ultrametric maximum represents the largest lateral motion a SPN can perform 
 Consider the resources depicted in green in the image below: these are a storage account and a cosmosDB instance.
 
 <div align="center">
-<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.1/blast_radius_example.png" width="50%">
+<img src="https://github.com/labyrinthinesecurity/silhouette/blob/2.2/blast_radius_example.png" width="50%">
 </div>
 
 Their Least Common Ancestor (LCA) in Azure's Tenant hierarchy is the Tenant itself. The "raw" ultrametric distance between two points is 1/(2^LCA), so their distance is 1/2^0 = 1.0
