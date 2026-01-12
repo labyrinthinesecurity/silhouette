@@ -85,11 +85,14 @@ def hash_rdids(rdid_list):
 
  
 def generate_AZGRAPH():
+  strict=False
+  strict_df=None
+  loose_df=None
   if os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
     score_df = pd.read_csv(f'sorted_NHIs_{timestamp}.csv')
   else:
     print(f"  ERROR, cannot read sorted_NHIs_{timestamp}.csv ====> please run silhouette.py first")
-    sys.exit()
+    sys.exit(1)
   strict_score_df = score_df.copy()
   strict_score_df['kappa'] = np.where(score_df['WAR'] >= 900, 699,
                     np.where(score_df['WAR'] >= 800, 588,
@@ -98,95 +101,121 @@ def generate_AZGRAPH():
   #loose_score_filtered = score_df[['pid', 'name', 'WAR', 'blast_radius']]
   score_filtered = strict_score_df[['pid', 'name', 'kappa', 'WAR', 'blast_radius']]
   if os.path.exists(f'AZURE_FRS_{timestamp}.csv'):
-    df = pd.read_csv(f'AZURE_FRS_{timestamp}.csv', usecols=['pid', 'rdid'])
-  else:
+    loose_df = pd.read_csv(f'AZURE_FRS_{timestamp}.csv', usecols=['pid', 'rdid'])
+  if os.path.exists(f'STRICT_AZURE_FRS_{timestamp}.csv'):
+    strict_df = pd.read_csv(f'STRICT_AZURE_FRS_{timestamp}.csv', usecols=['pid', 'rdid'])
+    strict=True
+  if not os.path.exists(f'AZURE_FRS_{timestamp}.csv'):
     print(f"  ERROR, cannot read AZURE_FRS_{timestamp}.csv ====> please run silhouette with --frs option")
-    sys.exit()
+    sys.exit(1)
+
   c=0
-  for p in df['pid']:
+  for p in loose_df['pid']:
     if p not in pid_dict:
       c+=1
       pid_dict[p]=c
-  
-  for p in df['rdid']:
-    pair=p.split(":")
-    strict_scope_abstraction=pair[1]
-    loose_scope_abstraction=pair[1]
-    if int(pair[1])>loose_threshold:
-      loose_scope_abstraction=str(loose_threshold)
-    loose_p=pair[0]+":"+loose_scope_abstraction
-    if p not in rdid_dict:
-      c+=1
-      rdid_dict[p]=c
-    if loose_p not in loose_rdid_dict:
-      c+=1
-      loose_rdid_dict[loose_p]=c
-  
+
+  if strict_df is not None:
+    for p in strict_df['rdid']:
+      if p not in rdid_dict:
+        c+=1
+        rdid_dict[p]=c
+    
+  if loose_df is not None:
+    for p in loose_df['rdid']:
+      if p not in loose_rdid_dict:
+        c+=1
+        loose_rdid_dict[p]=c
+
   reverse_pid_dict = {v: k for k, v in pid_dict.items()}
   reverse_rdid_dict = {v: k for k, v in rdid_dict.items()}
   reverse_loose_rdid_dict = {v: k for k, v in loose_rdid_dict.items()}
 
-  df['loose_rdid']=df['rdid'].apply(cap_scope_abstraction)
+  #df['loose_rdid']=df['rdid'].apply(cap_scope_abstraction)
 
   # Assign unique integer values to each unique pid and rdid
-  df['pid_unique'] = df['pid'].apply(lambda x: pid_dict[x])  
-  df['rdid_unique'] = df['rdid'].apply(lambda x: rdid_dict[x])  # Same for rdid
-  df['loose_rdid_unique'] = df['rdid'].apply(lambda x: loose_rdid_dict[x.split(':')[0]+":"+str(loose_threshold) if int(x.split(':')[1]) > loose_threshold else x])  # Same for loose rdids, but we cap the scope abstraction to the threshold
-  df['edgetype'] = 'plus'
-
-  #print(df['rdid'])
-  #print(df['loose_rdid'])
-  #sys.exit()
+  if strict_df is not None:
+    strict_df['pid_unique'] = strict_df['pid'].apply(lambda x: pid_dict[x])  
+    strict_df['rdid_unique'] = strict_df['rdid'].apply(lambda x: rdid_dict[x])  # Same for rdid
+    strict_df['edgetype'] = 'plus'
+    strict_df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"STRICT_AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
+  if loose_df is not None:
+    loose_df['pid_unique'] = loose_df['pid'].apply(lambda x: pid_dict[x])  
+    loose_df['rdid_unique'] = loose_df['rdid'].apply(lambda x: loose_rdid_dict[x])
+    loose_df['edgetype'] = 'plus'
+    loose_df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
+  print(strict_df['rdid'])
+  print("LOOSE:")
+  print(loose_df['rdid'])
   
-  df[['loose_rdid','pid','edgetype','loose_rdid_unique', 'pid_unique']].to_csv(f"AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
-  df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"STRICT_AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
-  pid_to_rdids_list = df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
-  pid_to_loose_rdids_list = df.groupby('pid')['loose_rdid'].apply(lambda lst: sorted(map(str, lst)))
+  pid_to_rdids_list = strict_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
+  pid_to_loose_rdids_list = loose_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
+
   pid_to_rdids_dict = pid_to_rdids_list.to_dict()
   pid_to_loose_rdids_dict = pid_to_loose_rdids_list.to_dict()
+
   loose_hashed = pid_to_loose_rdids_list.apply(hash_rdids).reset_index()
   hashed = pid_to_rdids_list.apply(hash_rdids).reset_index()
+
   hashed.columns = ['pid', 'fiber_id']
   loose_hashed.columns = ['pid', 'fiber_id']
+
   hashed['roles'] = hashed['pid'].map(pid_to_rdids_dict)
   loose_hashed['roles'] = hashed['pid'].map(pid_to_loose_rdids_dict)
+
   hashed = pd.merge(hashed, score_filtered, on='pid', how='left')
   loose_hashed = pd.merge(loose_hashed, score_filtered, on='pid', how='left')
+
+  print("merges:")
+  print(len(hashed))
+  print(len(loose_hashed))
+
   pops = hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
   loose_pops = loose_hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
+
   hashed = hashed.merge(pops, on='fiber_id')
-  loose_hashed = loose_hashed.merge(pops, on='fiber_id')
+  loose_hashed = loose_hashed.merge(loose_pops, on='fiber_id')
+
   hashed['synth_fiber'] = False
   loose_hashed['synth_fiber'] = False
+
   hashed = hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
   loose_hashed = loose_hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
+
   hashed = hashed.sort_values(by=['pop','kappa', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
   loose_hashed = loose_hashed.sort_values(by=['pop','kappa', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
+
   print(f"  unique PIDs: {len(pid_dict)}, unique STRICT scoped role def: {len(rdid_dict)}, unique LOOSE scoped role def: {len(loose_rdid_dict)}")
+
   unique_fibers_count = hashed['fiber_id'].nunique()
   loose_unique_fibers_count = loose_hashed['fiber_id'].nunique()
   print(f"  unique STRICT fibers: {unique_fibers_count}, unique LOOSE fibers: {loose_unique_fibers_count}")
+
   counts = hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
   loose_counts = loose_hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
+
   singletons = counts[counts == 1].count()
   loose_singletons = loose_counts[loose_counts == 1].count()
+
   ratio=int(100.0*float(singletons)/float(len(pid_dict)))
   loose_ratio=int(100.0*float(loose_singletons)/float(len(pid_dict)))
   print(f"  STRICT singleton PIDs: {singletons} ({ratio}%), LOOSE singleton PIDs: {loose_singletons} ({loose_ratio}%)")
+
   if args.synthetic:
-    hashed.to_csv(f"fibers_{timestamp}.csv.tmp", index=False)
-    loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv.tmp", index=False)
+    #hashed.to_csv(f"fibers_{timestamp}.csv.tmp", index=False)
+    #loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv.tmp", index=False)
+    return hashed,loose_hashed
   else:
     hashed.to_csv(f"fibers_{timestamp}.csv", index=False)
     loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv", index=False)
-    sys.exit()
+    return hashed,loose_hashed
 
 if os.path.exists('groups_roles.json'):
   with open('groups_roles.json','r') as file:
     groups=json.load(file)
 else:
   print("ERROR. file groups_roles.json not found. Run silhouette first")
-  sys.exit()
+  sys.exit(1)
 
 print()
 
@@ -194,7 +223,7 @@ print()
 for timestamp in timestamps:
     print(f"Processing timestamp: {timestamp}")
     if not os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
-        #print(f"WARNING: File sorted_NHIs_{timestamp}.csv not found. Skipping...")
+        print(f"WARNING: File sorted_NHIs_{timestamp}.csv not found. Skipping...")
         continue
     warpermdict={}
     spnscache={}
@@ -212,17 +241,16 @@ for timestamp in timestamps:
     reverse_rdid_dict = {}
     reverse_loose_rdid_dict = {}
 
-    generate_AZGRAPH()
-
-    if os.path.exists(f"sorted_fibers_{timestamp}.csv.tmp"):
-      df = pd.read_csv(f"sorted_fibers_{timestamp}.csv.tmp")
-      os.remove('sorted_fibers_{timestamp}.csv.tmp')
+    df,loose_df = generate_AZGRAPH()
 
     df2 = df[df['pop'] > 1].reset_index(drop=True)
     df = df[df['pop'] == 1].reset_index(drop=True)
 
-    df['roles'] = df['roles'].apply(ast.literal_eval) #stringed list to list
-    df['roles'] = df['roles'].apply(set) # list to set
+#    df['roles'] = df['roles'].apply(ast.literal_eval) #stringed list to list
+#    df['roles'] = df['roles'].apply(set) # list to set
+   
+    if not args.synthetic:
+      continue
     # Encode sets into binary format
     mlb = MultiLabelBinarizer(sparse_output=True)
     X = mlb.fit_transform(df['roles'])
