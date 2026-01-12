@@ -104,19 +104,6 @@ def generate_demo_data():
     return df_nhis, df_fibers
 
 # -----------------------------
-# Read or generate data
-# -----------------------------
-if args.demo:
-    df_nhis, df_fibers = generate_demo_data()
-else:
-    df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
-    if os.path.exists(f'fibers_{args.asof}.csv'):
-      df_fibers = pd.read_csv(f'fibers_{args.asof}.csv')
-    elif os.path.exists(f'sorted_fibers_{args.asof}.csv'):
-      df_fibers = pd.read_csv(f'sorted_fibers_{args.asof}.csv')
-    df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
-
-# -----------------------------
 # Map blast_radius to kappa
 # -----------------------------
 def map_blast_to_kappa(df, blast_col='blast_radius', depth_col='depth_d',
@@ -153,6 +140,25 @@ def map_blast_to_kappa(df, blast_col='blast_radius', depth_col='depth_d',
     #df['mapping_suspicious'] = suspicious
     df['ctrl_max_flag'] = (df[kappa_col] > df[delta_col]) # & (~df['mapping_suspicious'])
     return df
+
+strict=False
+if args.demo:
+    df_nhis, df_fibers = generate_demo_data()
+else:
+    if os.path.exists(f'sorted_NHIs_{args.asof}.csv'):
+      df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
+    else:
+      print("ERR: NHI csv file not found.")
+      sys.exit()
+    if os.path.exists(f'fibers_{args.asof}.csv'):
+      df_fibers = pd.read_csv(f'fibers_{args.asof}.csv')
+      strict=True
+    elif os.path.exists(f'sorted_fibers_{args.asof}.csv'):
+      df_fibers = pd.read_csv(f'sorted_fibers_{args.asof}.csv')
+    else:
+      print("ERR: fibers csv file not found.")
+      sys.exit()
+    df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
 
 df = map_blast_to_kappa(df_nhis, blast_col='blast_radius', depth_col='depth_d',
                         sublevel_col='delta_sublevel', i_col='i_factor',
@@ -216,7 +222,11 @@ def interactive_barchart(df, df_full):
             h,w = stdscr.getmaxyx()
 
             # Draw title with border
-            title = "╔══ FIBER COUNT BY DECILE ══╗"
+            if strict:
+              sm='(strict mode)'
+            else:
+              sm=''
+            title = "╔══ FIBER COUNT BY DECILE "+sm+" ══╗"
             stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
             stdscr.addstr(0, max(0, (w - len(title)) // 2), title)
             stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
