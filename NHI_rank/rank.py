@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import argparse
 import curses
-import sys
+import sys, os
 
 # -----------------------------
 # Argument parser
@@ -110,7 +110,10 @@ if args.demo:
     df_nhis, df_fibers = generate_demo_data()
 else:
     df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
-    df_fibers = pd.read_csv(f'sorted_fibers_{args.asof}.csv')
+    if os.path.exists(f'fibers_{args.asof}.csv'):
+      df_fibers = pd.read_csv(f'fibers_{args.asof}.csv')
+    elif os.path.exists(f'sorted_fibers_{args.asof}.csv'):
+      df_fibers = pd.read_csv(f'sorted_fibers_{args.asof}.csv')
     df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
 
 # -----------------------------
