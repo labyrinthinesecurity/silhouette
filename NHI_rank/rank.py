@@ -9,16 +9,12 @@ import sys, os
 # Argument parser
 # -----------------------------
 parser = argparse.ArgumentParser(description='Read data as of a specific date.')
-parser.add_argument('--asof', type=str, help='Date in YYYY-MM-DD format')
+parser.add_argument('--asof', required=True, type=str, help='Date in YYYY-MM-DD format')
 parser.add_argument('-i', '--interactive', action='store_true',
                     help='Launch interactive curses barchart')
-parser.add_argument('--demo', action='store_true',
-                    help='Run in demo mode with generated data')
 args = parser.parse_args()
 
-# Validate arguments
-if not args.demo and not args.asof:
-    parser.error('--asof is required unless --demo is specified')
+strict=False
 
 # -----------------------------
 # Pandas display options
@@ -26,82 +22,6 @@ if not args.demo and not args.asof:
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.max_columns', None)
-
-# -----------------------------
-# Demo data generation
-# -----------------------------
-def generate_demo_data():
-    """Generate realistic demo data for visualization."""
-    np.random.seed(42)
-
-    # Realistic NHI names (companies, services, infrastructure)
-    company_names = [
-        "GlobalTech Solutions Corp", "SecureNet Infrastructure LLC", "DataStream Analytics Inc",
-        "CloudPrime Services", "NetCore Systems International", "TechVault Security Group",
-        "Quantum Computing Services", "CyberShield Defense Systems", "InfoGuard Technologies",
-        "Digital Fortress Enterprises", "Network Dynamics Corporation", "SafeData Holdings",
-        "Enterprise Cloud Networks", "CoreProtect Security", "MegaScale Infrastructure",
-        "AlphaNet Communications", "BetaSphere Technologies", "GammaTech Industries",
-        "DeltaCloud Solutions", "EpsilonData Corporation", "ZetaNet Services",
-        "EtaSecure Systems", "ThetaCore Infrastructure", "IotaPrime Technologies",
-        "KappaShield Defense", "LambdaData Analytics", "MuCloud Services",
-        "NuNet Communications", "XiTech Solutions", "OmicronSphere Corp",
-        "PiSecure Networks", "RhoData Systems", "SigmaCloud Infrastructure",
-        "TauTech Services", "UpsilonNet Group", "PhiGuard Technologies",
-        "ChiCore Solutions", "PsiData Corporation", "OmegaNet Enterprises",
-        "Hyperscale Computing Alliance", "Distributed Systems Consortium",
-        "Regional Internet Exchange Point", "Metropolitan Area Network Authority",
-        "National Cybersecurity Operations Center", "International Data Transit Hub",
-        "Edge Computing Distribution Network", "Satellite Communications Array",
-        "Fiber Optic Backbone Provider", "Wireless Infrastructure Deployment",
-        "Content Delivery Network Prime", "Load Balancing Service Group"
-    ]
-
-    # Generate 150 NHIs with varying characteristics
-    n_nhis = 150
-    nhis = []
-
-    for i in range(n_nhis):
-        name = company_names[i % len(company_names)]
-        if i >= len(company_names):
-            name = f"{name} - Region {i // len(company_names)}"
-
-        # Generate blast_radius with power-law distribution (few critical, many minor)
-        blast_radius = np.random.beta(0.5, 5)  # Skewed toward small values
-
-        # WAR (Weighted Attack Risk) - correlated with blast_radius but with noise
-        base_war = int(100 + blast_radius * 800)
-        war = max(0, int(base_war + np.random.normal(0, 50)))
-
-        nhis.append({
-            'pid': f'NHI-{i:05d}',
-            'name': name,
-            'blast_radius': blast_radius,
-            'WAR': war
-        })
-
-    df_nhis = pd.DataFrame(nhis)
-
-    # Generate fibers (groups of NHIs with similar characteristics)
-    n_fibers = 80
-    fibers = []
-
-    for fid in range(n_fibers):
-        # Each fiber contains 1-5 NHIs
-        n_members = np.random.choice([1, 2, 3, 4, 5], p=[0.5, 0.25, 0.15, 0.07, 0.03])
-        member_pids = np.random.choice(df_nhis['pid'].values, size=n_members, replace=False)
-
-        for pid in member_pids:
-            fibers.append({
-                'fiber_id': f'FBR-{fid:04d}-{np.random.randint(1000, 9999):04x}',
-                'pid': pid,
-                'blast_radius': df_nhis[df_nhis['pid'] == pid]['blast_radius'].values[0]
-            })
-
-    df_fibers = pd.DataFrame(fibers)
-    df_fibers['pop'] = df_fibers.groupby('fiber_id')['pid'].transform('count')
-
-    return df_nhis, df_fibers
 
 # -----------------------------
 # Map blast_radius to kappa
@@ -118,15 +38,12 @@ def map_blast_to_kappa(df, blast_col='blast_radius', depth_col='depth_d',
     kappa_col='kappa'
     df = strict_df.copy()
     br = df[blast_col].astype(float).copy()
-    #invalid_mask = br.isna() | (br <= 0) | (br > 1)
     br_nonzero = br.replace(0, np.nan)
     with np.errstate(divide='ignore', invalid='ignore'):
         delta_float = -np.log2(br_nonzero)
     sentinel = 2 * bigint_guardrail
     delta_float = delta_float.fillna(sentinel)
     delta_sublevel = np.rint(delta_float).astype(int)
-    #deviation = np.abs(delta_float - delta_sublevel)
-    #suspicious = (deviation > tol) | invalid_mask
     depth_d = (delta_sublevel // 2).astype(int)
     i_factor = np.where(delta_sublevel % 2 == 1, 1, 2)
     #depth_to_kappa = {0:900,1:800,2:700,3:407,4:306,5:204,6:102,7:2}
@@ -137,14 +54,10 @@ def map_blast_to_kappa(df, blast_col='blast_radius', depth_col='depth_d',
     df[depth_col] = depth_d
     df[i_col] = i_factor
     df[delta_col] = kappa_eq
-    #df['mapping_suspicious'] = suspicious
-    df['ctrl_max_flag'] = (df[kappa_col] > df[delta_col]) # & (~df['mapping_suspicious'])
+    df['ctrl_max_flag'] = (df[kappa_col] > df[delta_col])
     return df
 
-strict=False
-if args.demo:
-    df_nhis, df_fibers = generate_demo_data()
-else:
+if True:
     if os.path.exists(f'sorted_NHIs_{args.asof}.csv'):
       df_nhis = pd.read_csv(f'sorted_NHIs_{args.asof}.csv')
     else:
@@ -531,7 +444,7 @@ def interactive_barchart(df, df_full):
             stdscr.attroff(curses.color_pair(5))
 
             # Draw header
-            header = "  # NHI NAME                                                          KAPPA  DELTA   COMBINED"
+            header = "  # NHI NAME                                                          KAPPA  DELTA  "
             stdscr.attron(curses.color_pair(6) | curses.A_BOLD)
             stdscr.addstr(2, 2, header[:w-4])
             stdscr.addstr(3, 2, "─" * min(len(header), w-4))
@@ -541,7 +454,7 @@ def interactive_barchart(df, df_full):
             visible_rows = min(h - 5, len(nhis_display) - scroll)
             for i in range(visible_rows):
                 row = nhis_display.iloc[i + scroll]
-                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['kappa']:4}   {row['kappa_equiv']:4}   {row['combined']:8}"
+                line = f"{i+scroll+1:3d} {row['name'][:64]:64s} {row['kappa']:4}   {row['kappa_equiv']:4}  "
 
                 # Alternate row colors for readability
                 if i % 2 == 0:

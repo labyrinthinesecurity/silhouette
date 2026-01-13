@@ -16,7 +16,7 @@ parser.add_argument('--version', required=False, action="store_true", help='show
 parser.add_argument('--verbose', required=False, action="store_true", help='toggle debugging output')
 parser.add_argument("--apps", required=False, action="store_true", help="ignore managed identities")
 parser.add_argument("--mis", required=False, action="store_true", help="ignore applications")
-parser.add_argument('--frs', required=False, action="store_true", help='reserved for future use')
+parser.add_argument('--frs', required=False, action="store_true", help='preprocessing for fibration')
 parser.add_argument("--live", required=False, action="store_true", help="refresh local Silhouette caches (slow, but accurate)")
 args = parser.parse_args()
 
@@ -29,6 +29,7 @@ spn={}
 membership={}
 gperms={}
 frs={}
+strict_frs={}
 groups={}
 group={}
 hierarchy = None
@@ -545,6 +546,7 @@ def generate_WAR_norms(single,combined):
             groups[ag['id']]['actions_dict']={}
             groups[ag['id']]['rdids']=[]
             groups[ag['id']]['resolutions']=[]
+            groups[ag['id']]['strict_resolutions']=[]
             groups[ag['id']]['WAR']=0
             groups[ag['id']]['D']=False
             groups[ag['id']]['A']=False
@@ -600,6 +602,7 @@ def generate_WAR_norms(single,combined):
         spn[role['pid']]['actions_dict']={}
         spn[role['pid']]['rdids']=[]
         spn[role['pid']]['resolutions']=[]
+        spn[role['pid']]['strict_resolutions']=[]
         spn[role['pid']]['minW']=0
         spn[role['pid']]['minA']=0
         spn[role['pid']]['minR']=0
@@ -624,6 +627,7 @@ def generate_WAR_norms(single,combined):
         groupsof=set([])
         rdids=[]
         resolutions=[]
+        strict_resolutions=[]
         for ag in g0v:
           groupsof.add(ag['id'])
           if ag['id'] not in groups:
@@ -643,6 +647,7 @@ def generate_WAR_norms(single,combined):
             groups[ag['id']]['actions_dict']={}
             groups[ag['id']]['rdids']=[]
             groups[ag['id']]['resolutions']=[]
+            groups[ag['id']]['strict_resolutions']=[]
             groups[ag['id']]['WAR']=0
             groups[ag['id']]['D']=False
             groups[ag['id']]['A']=False
@@ -656,6 +661,18 @@ def generate_WAR_norms(single,combined):
                   r=1
                 else: # tenant or MG
                   r=0
+                if rrr==1: # tenant
+                  ka=0
+                elif rrr==2: # MG
+                  ka=1
+                elif rrr==3: # sub
+                  ka=2
+                elif rrr==4:  # RG
+                  ka=3
+                elif rrr==6:  # resource
+                  ka=4
+                else:  # subresource
+                  ka=5
                 rdid=combined['rdid'].split('RoleDefinitions/')
                 cnt=-1
                 if rdid[1] in rdids:
@@ -666,12 +683,16 @@ def generate_WAR_norms(single,combined):
                   if r<resolutions[cnt]:
                     #print("  +=+= GROUP CUMUL found a lower scope",r,"<",resolutions[cnt],"at counter",cnt,"rdid",rdid[1])
                     resolutions[cnt]=min(r,resolutions[cnt])
+                  if ka<strict_resolutions[cnt]:
+                    strict_resolutions[cnt]=min(ka,strict_resolutions[cnt])
                 else:
                   rdids.append(rdid[1])
                   resolutions.append(r)
+                  strict_resolutions.append(ka)
                 if rdid[1] not in groups[ag['id']]['rdids']:
                   groups[ag['id']]['rdids'].append(rdid[1])
                   groups[ag['id']]['resolutions'].append(r)
+                  groups[ag['id']]['strict_resolutions'].append(ka)
                 else:
                   cnt=-1
                   for rdd in groups[ag['id']]['rdids']:
@@ -681,6 +702,8 @@ def generate_WAR_norms(single,combined):
                   if r<groups[ag['id']]['resolutions'][cnt]:
                     #print("  +=+= GROUP found a lower scope",r,"<", groups[ag['id']]['resolutions'][cnt],"at counter",cnt,"rdid",rdid[1])
                     groups[ag['id']]['resolutions'][cnt]=min(r,groups[ag['id']]['resolutions'][cnt])
+                  if ka<groups[ag['id']]['strict_resolutions'][cnt]:
+                    groups[ag['id']]['strict_resolutions'][cnt]=min(ka,groups[ag['id']]['strict_resolutions'][cnt])
                 if 'actions' in combined:
                   actions=json.loads(combined['actions'])
                   if len(actions)>0:
@@ -728,11 +751,14 @@ def generate_WAR_norms(single,combined):
               rdids.append(r)
             for rz in groups[ag['id']]['resolutions']:
               resolutions.append(rz)
+            for rzk in groups[ag['id']]['strict_resolutions']:
+              strict_resolutions.append(rzk)
         if len(groupsof)>0:
           spn[role['pid']]['memberships']=len(groupsof)
           spn[role['pid']]['groups']=list(groupsof)
           spn[role['pid']]['rdids']=rdids
           spn[role['pid']]['resolutions']=resolutions
+          spn[role['pid']]['strict_resolutions']=strict_resolutions
           for g in groupsof:
             gW=int(math.floor(groups[g]['WAR']/100))
             gA=int(math.floor(groups[g]['WAR']-100*gW)/10)
@@ -783,7 +809,7 @@ def generate_WAR_norms(single,combined):
       if args.verbose and (args.single is None):
         print(role['pid'],"GM rdids BEFORE direct rdids",spn[role['pid']]['iras'])
         print("  ",spn[role['pid']]['rdids'])
-        print("  ",spn[role['pid']]['resolutions'])
+        print("  ",spn[role['pid']]['resolutions']," strict:",spn[role['pid']]['strict_resolutions'])
     newrdids=set([])
     for combined in role['set_combinedRole']:
       _,rrr=extract_azure_resource_details(combined['scope'])
@@ -793,10 +819,23 @@ def generate_WAR_norms(single,combined):
         r=1
       else: # tenant or MG
         r=0
+      if rrr==1: # tenant
+        ka=0
+      elif rrr==2: # MG
+        ka=1
+      elif rrr==3: # sub
+        ka=2
+      elif rrr==4: # RG
+        ka=3
+      elif rrr==6: # resource
+        ka=4
+      else: # subresource
+        ka=5
       rdid=combined['rdid'].split('RoleDefinitions/')
       if rdid[1] not in spn[role['pid']]['rdids']:
         spn[role['pid']]['rdids'].append(rdid[1])
         spn[role['pid']]['resolutions'].append(r)
+        spn[role['pid']]['strict_resolutions'].append(ka)
         newrdids.add(rdid[1])
         spn[role['pid']]['uras']+=1
       else:
@@ -807,6 +846,8 @@ def generate_WAR_norms(single,combined):
             if r<spn[role['pid']]['resolutions'][cnt]:
               #print("  ",spn[role['pid']],"+=+= SPN found a lower scope",r,"<",spn[role['pid']]['resolutions'][cnt],"at counter",cnt,"rdid",rdid[1])
               spn[role['pid']]['resolutions'][cnt]=min(r,spn[role['pid']]['resolutions'][cnt])
+            if ka<spn[role['pid']]['strict_resolutions'][cnt]:
+              spn[role['pid']]['strict_resolutions'][cnt]=min(ka,spn[role['pid']]['strict_resolutions'][cnt])
       if 'actions' in combined:
         actions=json.loads(combined['actions'])
         if len(actions)>0:
@@ -909,13 +950,16 @@ def generate_WAR_norms(single,combined):
     elif args.frs:
       if s not in frs:
         frs[s]=set([])
+        strict_frs[s]=set([])
       if args.verbose and (args.single is None):
         print("  adding RDIDS of SPN",s,"to FRS",len(spn[s]['rdids']))
       cnt=-1
       for rd in spn[s]['rdids']:
         cnt+=1
         rdscope=rd+":"+str(spn[s]['resolutions'][cnt])
+        strict_rdscope=rd+":"+str(spn[s]['strict_resolutions'][cnt])
         frs[s].add(rdscope)
+        strict_frs[s].add(strict_rdscope)
       if args.verbose and (args.single is None):
         print("  resulting FRS for SPN",s,"is",frs[s])
   for sd in spn_to_delete:
@@ -927,6 +971,13 @@ def generate_WAR_norms(single,combined):
       writer.writerow(headers)
       for f in frs:
         for r in frs[f]:
+          row=[f,r]
+          writer.writerow(row)
+    with open(f"STRICT_AZURE_FRS_{current_timestamp}.csv", "w", newline="") as f:
+      writer = csv.writer(f)
+      writer.writerow(headers)
+      for f in strict_frs:
+        for r in strict_frs[f]:
           row=[f,r]
           writer.writerow(row)
   if single:
@@ -985,7 +1036,7 @@ def generate_WAR_norms(single,combined):
     scores2csv(spn) 
 
 def az_ad_sp(token=None):
-  print("retrieving all your SPNs from Entra... Please be patient, it will take a few minutes")
+  print("retrieving all your SPNs from Entra... Please be patient, il will take a few minutes")
   if not token:
     token = get_token('graph.microsoft.com')
   url = 'https://graph.microsoft.com/v1.0/servicePrincipals'  

@@ -88,6 +88,8 @@ def generate_AZGRAPH():
   strict=False
   strict_df=None
   loose_df=None
+  hashed=None
+  loose_hashed=None
   if os.path.exists(f'sorted_NHIs_{timestamp}.csv'):
     score_df = pd.read_csv(f'sorted_NHIs_{timestamp}.csv')
   else:
@@ -139,75 +141,58 @@ def generate_AZGRAPH():
     strict_df['rdid_unique'] = strict_df['rdid'].apply(lambda x: rdid_dict[x])  # Same for rdid
     strict_df['edgetype'] = 'plus'
     strict_df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"STRICT_AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
+    pid_to_rdids_list = strict_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
+    pid_to_rdids_dict = pid_to_rdids_list.to_dict()
+    hashed = pid_to_rdids_list.apply(hash_rdids).reset_index()
+    hashed.columns = ['pid', 'fiber_id']
+    hashed['roles'] = hashed['pid'].map(pid_to_rdids_dict)
+    hashed = pd.merge(hashed, score_filtered, on='pid', how='left')
+    pops = hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
+    hashed = hashed.merge(pops, on='fiber_id')
+    hashed['synth_fiber'] = False
+    hashed = hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
+    hashed = hashed.sort_values(by=['pop','WAR', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
+    unique_fibers_count = hashed['fiber_id'].nunique()
+    counts = hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
+    singletons = counts[counts == 1].count()
+    ratio=int(100.0*float(singletons)/float(len(pid_dict)))
   if loose_df is not None:
     loose_df['pid_unique'] = loose_df['pid'].apply(lambda x: pid_dict[x])  
     loose_df['rdid_unique'] = loose_df['rdid'].apply(lambda x: loose_rdid_dict[x])
     loose_df['edgetype'] = 'plus'
     loose_df[['rdid','pid','edgetype','rdid_unique', 'pid_unique']].to_csv(f"AZGRAPH_{timestamp}.csv", index=False, header=['SourceName','TargetName','Type','Source','Target'])
-  print(strict_df['rdid'])
-  print("LOOSE:")
-  print(loose_df['rdid'])
-  
-  pid_to_rdids_list = strict_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
-  pid_to_loose_rdids_list = loose_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
+    pid_to_loose_rdids_list = loose_df.groupby('pid')['rdid'].apply(lambda lst: sorted(map(str, lst)))
+    pid_to_loose_rdids_dict = pid_to_loose_rdids_list.to_dict()
+    loose_hashed = pid_to_loose_rdids_list.apply(hash_rdids).reset_index()
+    loose_hashed.columns = ['pid', 'fiber_id']
+    loose_hashed['roles'] = loose_hashed['pid'].map(pid_to_loose_rdids_dict)
+    loose_hashed = pd.merge(loose_hashed, score_filtered, on='pid', how='left')
+    loose_pops = loose_hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
+    loose_hashed = loose_hashed.merge(loose_pops, on='fiber_id')
+    loose_hashed['synth_fiber'] = False
+    loose_hashed = loose_hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
+    loose_hashed = loose_hashed.sort_values(by=['pop','WAR', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
+    loose_unique_fibers_count = loose_hashed['fiber_id'].nunique()
 
-  pid_to_rdids_dict = pid_to_rdids_list.to_dict()
-  pid_to_loose_rdids_dict = pid_to_loose_rdids_list.to_dict()
+  #print(f"  unique PIDs: {len(pid_dict)}, unique STRICT scoped role def: {len(rdid_dict)}, unique LOOSE scoped role def: {len(loose_rdid_dict)}")
+  #print(f"  unique STRICT fibers: {unique_fibers_count}, unique LOOSE fibers: {loose_unique_fibers_count}")
 
-  loose_hashed = pid_to_loose_rdids_list.apply(hash_rdids).reset_index()
-  hashed = pid_to_rdids_list.apply(hash_rdids).reset_index()
+    loose_counts = loose_hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
 
-  hashed.columns = ['pid', 'fiber_id']
-  loose_hashed.columns = ['pid', 'fiber_id']
+    loose_singletons = loose_counts[loose_counts == 1].count()
 
-  hashed['roles'] = hashed['pid'].map(pid_to_rdids_dict)
-  loose_hashed['roles'] = hashed['pid'].map(pid_to_loose_rdids_dict)
-
-  hashed = pd.merge(hashed, score_filtered, on='pid', how='left')
-  loose_hashed = pd.merge(loose_hashed, score_filtered, on='pid', how='left')
-
-  print("merges:")
-  print(len(hashed))
-  print(len(loose_hashed))
-
-  pops = hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
-  loose_pops = loose_hashed.groupby('fiber_id')['pid'].count().reset_index(name='pop')
-
-  hashed = hashed.merge(pops, on='fiber_id')
-  loose_hashed = loose_hashed.merge(loose_pops, on='fiber_id')
-
-  hashed['synth_fiber'] = False
-  loose_hashed['synth_fiber'] = False
-
-  hashed = hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
-  loose_hashed = loose_hashed[['fiber_id', 'pop', 'kappa', 'WAR', 'blast_radius', 'pid', 'name', 'roles','synth_fiber']]
-
-  hashed = hashed.sort_values(by=['pop','kappa', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
-  loose_hashed = loose_hashed.sort_values(by=['pop','kappa', 'blast_radius', 'fiber_id','pid'], ascending=[False,False,False,True,True])
-
-  print(f"  unique PIDs: {len(pid_dict)}, unique STRICT scoped role def: {len(rdid_dict)}, unique LOOSE scoped role def: {len(loose_rdid_dict)}")
-
-  unique_fibers_count = hashed['fiber_id'].nunique()
-  loose_unique_fibers_count = loose_hashed['fiber_id'].nunique()
-  print(f"  unique STRICT fibers: {unique_fibers_count}, unique LOOSE fibers: {loose_unique_fibers_count}")
-
-  counts = hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
-  loose_counts = loose_hashed.groupby('fiber_id')['pid'].count().sort_values(ascending=False)
-
-  singletons = counts[counts == 1].count()
-  loose_singletons = loose_counts[loose_counts == 1].count()
-
-  ratio=int(100.0*float(singletons)/float(len(pid_dict)))
-  loose_ratio=int(100.0*float(loose_singletons)/float(len(pid_dict)))
-  print(f"  STRICT singleton PIDs: {singletons} ({ratio}%), LOOSE singleton PIDs: {loose_singletons} ({loose_ratio}%)")
+    loose_ratio=int(100.0*float(loose_singletons)/float(len(pid_dict)))
+    #print(f"  STRICT singleton PIDs: {singletons} ({ratio}%), LOOSE singleton PIDs: {loose_singletons} ({loose_ratio}%)")
 
   if args.synthetic:
     #hashed.to_csv(f"fibers_{timestamp}.csv.tmp", index=False)
     #loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv.tmp", index=False)
     return hashed,loose_hashed
   else:
-    hashed.to_csv(f"fibers_{timestamp}.csv", index=False)
-    loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv", index=False)
+    if hashed is not None:
+      hashed.to_csv(f"fibers_{timestamp}.csv", index=False)
+    if loose_hashed is not None:
+      loose_hashed.to_csv(f"sorted_fibers_{timestamp}.csv", index=False)
     return hashed,loose_hashed
 
 if os.path.exists('groups_roles.json'):
@@ -242,6 +227,8 @@ for timestamp in timestamps:
     reverse_loose_rdid_dict = {}
 
     df,loose_df = generate_AZGRAPH()
+
+    continue
 
     df2 = df[df['pop'] > 1].reset_index(drop=True)
     df = df[df['pop'] == 1].reset_index(drop=True)
