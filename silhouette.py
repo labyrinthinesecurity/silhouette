@@ -1,4 +1,28 @@
 #!/usr/bin/python3
+"""
+Azure Silhouette - A Non-Human Identity (NHI) Risk Analyzer
+
+This tool analyzes Azure service principals (SPNs) and managed identities to quantify
+their security risk based on assigned RBAC permissions. It calculates WAR (Write/Action/Read)
+scores and blast radius metrics to help identify over-privileged identities.
+
+Key Features:
+- WAR Score Calculation: Quantifies Azure control plane permissions across scope levels
+- Blast Radius Analysis: Measures data plane permission impact using ultrametry
+- Group Membership Resolution: Includes inherited permissions from Azure AD groups
+- Define/Assign Detection: Identifies identities that can modify RBAC
+- Export to CSV: Generates ranked lists for remediation prioritization
+
+Usage:
+    python silhouette.py                    # Analyze all SPNs (uses cache)
+    python silhouette.py --live             # Refresh cache and analyze
+    python silhouette.py --single <SPN_ID>  # Analyze specific SPN
+    python silhouette.py --frs              # Generate fibration data
+
+Author: Christophe Parisel (labyrinthinesecurity)
+License: LGPL
+Version: 2.1 (Ultrametry edition)
+"""
 from native import *
 import subprocess
 import csv,os
@@ -31,18 +55,21 @@ gperms={}
 frs={}
 strict_frs={}
 groups={}
-group={}
 hierarchy = None
 
+# WAR Scoring Matrix: Maps permission types and scope levels to numerical scores
+# Higher scores indicate greater risk. Scores are combined (Write + Action + Read) to create
+# a composite WAR score that quantifies an identity's effective Azure permissions.
+# Scope levels: 0=none, 1=tenant, 2=mgmt group, 3=subscription, 4=resource group, 6=resource, 8=subresource
 silhouette={
         'superadmin': {
-            '0': 0,     # none
-            '1': 900,   # tenant
-            '2': 800,   # mgmt group
-            '3': 700,   # subscription
-            '4': 300,   # RG
-            '6': 200,   # resource
-            '8': 100,   # subresource
+            '0': 0,     # none - no permissions
+            '1': 900,   # tenant - highest risk (full tenant control)
+            '2': 800,   # mgmt group - very high risk (multiple subscriptions)
+            '3': 700,   # subscription - high risk (subscription-wide access)
+            '4': 300,   # resource group - medium risk (RG-scoped)
+            '6': 200,   # resource - lower risk (single resource)
+            '8': 100,   # subresource - lowest risk (subresource only)
             },
          'write/delete': {
             '0': 0,
@@ -92,6 +119,25 @@ silhouette={
 }
 
 def classify_da_permission(permission,notlowperms,notsegments):
+    """
+    Classify permissions related to Define/Assign (DA) capabilities in Azure.
+
+    This function analyzes Azure permissions to determine if they grant capabilities to
+    define custom roles or assign roles to principals. It specifically looks for permissions
+    related to microsoft.authorization and microsoft.managedidentity.
+
+    Args:
+        permission: Azure permission string (e.g., "Microsoft.Authorization/roleDefinitions/write")
+        notlowperms: List of lowercase permission strings that are explicitly excluded
+        notsegments: List of permission segments split by "/" for exclusion checking
+
+    Returns:
+        str or None: Classification result - one of:
+            - "superadmin": Full administrative permissions including both define and assign
+            - "define": Can define custom roles but not assign them
+            - "assign": Can assign roles but not define custom roles
+            - None: Permission does not grant define or assign capabilities
+    """
     lowperm = permission.lower()
     segments = lowperm.split("/")
 
@@ -104,26 +150,25 @@ def classify_da_permission(permission,notlowperms,notsegments):
         return None 
 
     if permission == "*" or permission == "/*":
-        if notlowperms and ("microsoft.authorization/roleassignments" not in notlowperms[0] and "microsoft.authorization/roledefinitions" not in notlowperms[0] and "microsoft.managedidentity/" not in notlowperms[0]):
-          return "superadmin"
+        return "superadmin"
+
+    # Check for role assignment permissions (unless explicitly excluded)
+    if "microsoft.authorization/roleassignments" in lowperm:
+        if not (notlowperms and "microsoft.authorization/roleassignments" in notlowperms[0]):
+            assigner=True
+
+    # Check for role definition permissions (unless explicitly excluded)
+    if "microsoft.authorization/roledefinitions" in lowperm:
+        if not (notlowperms and "microsoft.authorization/roledefinitions" in notlowperms[0]):
+            designer=True
+
+    # Check for managed identity assignment permissions (unless explicitly excluded)
+    if "/assign/action" in lowperm:
+        if "microsoft.managedidentity/" in lowperm:
+            if not (notlowperms and "/assign/action" in notlowperms[1]):
+                assigner=True
         else:
-          return "superadmin"
-
-    if notlowperms and ("microsoft.authorization/roleassignments" in lowperm and "microsoft.authorization/roleassignments" not in notlowperms[0]):
-        assigner=True
-    elif "microsoft.authorization/roleassignments" in lowperm:
-        assigner=True
-
-    if notlowperms and ("microsoft.authorization/roledefinitions" in lowperm and "microsoft.authorization/roledefinitions" not in notlowperms[0]):
-        designer=True
-    elif "microsoft.authorization/roledefinitions" in lowperm:
-        designer=True
-
-    if "microsoft.managedidentity/" in lowperm:
-      if notlowperms and ("/assign/action" in lowperm and "/assign/action" not in notlowperms[1]):
-        assigner=True
-    elif "/assign/action" in lowperm:
-        assigner=True
+            assigner=True
 
     if "microsoft.authorization/diagnosticsettings" in lowperm:
         return None
@@ -146,7 +191,7 @@ def classify_da_permission(permission,notlowperms,notsegments):
           return "superadmin"
         return None
 
-    if segments[-1:][0]=="*":
+    if segments[-1]=="*":
         if designer and not(assigner):
           return "define"
         if assigner and not(designer):
@@ -170,6 +215,24 @@ def classify_da_permission(permission,notlowperms,notsegments):
 
 
 def classify_war_permission(permission,resolution,verbose):
+    """
+    Classify an Azure permission based on its Write/Action/Read (WAR) characteristics.
+
+    This function categorizes Azure RBAC permissions into a hierarchy of access levels:
+    superadmin, write/delete, action, read, or none/unknown. The classification considers
+    both the permission scope and the operation type.
+
+    Args:
+        permission: Azure permission string (e.g., "Microsoft.Compute/virtualMachines/write")
+        resolution: Scope resolution level (1=tenant, 2=management group, 3=subscription,
+                   4=resource group, 6=resource, 8=subresource)
+        verbose: Boolean flag to enable logging of permission classifications
+
+    Returns:
+        tuple: (classification, resource_provider) where:
+            - classification: One of "superadmin", "write/delete", "action", "read", "none", "unknown"
+            - resource_provider: The Azure resource provider (first segment) or None for wildcards
+    """
     global warpermdict
     lowperms = permission.lower()
     segments = lowperms.split("/")
@@ -236,46 +299,58 @@ def classify_war_permission(permission,resolution,verbose):
       if "assign/action" in lowperms:
         return "read",segments[0]
 
-    if segments[-1:][0]=="*":
+    if segments[-1]=="*":
         if verbose:
             wpd=permission+":S:"+str(resolution)
             if wpd not in warpermdict:
               warpermdict[wpd]=0
-              #print(permission,"S",resolution)
         return "superadmin",rp
-    if "write" in segments[-1:][0].lower() or "delete" in segments[-1:][0].lower():
+    if "write" in segments[-1].lower() or "delete" in segments[-1].lower():
         if verbose:
           wpd=permission+":W:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-            #print(permission,"W",resolution)
         return "write/delete",rp
-    elif "action" in segments[-1:][0].lower():
+    elif "action" in segments[-1].lower():
         if verbose:
           wpd=permission+":A:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-            #print(permission,"A",resolution)
         return "action",rp
-    elif "read" in segments[-1:][0].lower():
+    elif "read" in segments[-1].lower():
         if verbose:
           wpd=permission+":R:"+str(resolution)
           if wpd not in warpermdict:
             warpermdict[wpd]=0
-            #print(permission,"R",resolution)
         return "read",rp
     if verbose:
       wpd=permission+":U:"+str(resolution)
       if wpd not in warpermdict:
         warpermdict[wpd]=0
-        #print(permission,"U",resolution)
     return "unknown",None
 
 
 
 def partition_permissions(permissions,notpermissions,resolution):
-    war_perms=set([])
-    da_perms=set([])
+    """
+    Partition a list of permissions into WAR (Write/Action/Read) and DA (Define/Assign) categories.
+
+    This function processes a set of Azure permissions and classifies each one into both
+    WAR categories (for resource access) and DA categories (for role management capabilities).
+    Excluded permissions (notpermissions) are considered during classification.
+
+    Args:
+        permissions: List of Azure permission strings to classify
+        notpermissions: List of permission strings that are explicitly excluded
+        resolution: Scope resolution level for WAR classification
+
+    Returns:
+        tuple: (war_perms, da_perms) where:
+            - war_perms: Set of strings formatted as "classification:resolution:permission"
+            - da_perms: Set of strings formatted as "classification:permission"
+    """
+    war_perms=set()
+    da_perms=set()
     notlowperms = [s.lower() for s in notpermissions]
     notsegments = [s.split("/") for s in notlowperms]
     for permission in permissions:
@@ -289,6 +364,29 @@ def partition_permissions(permissions,notpermissions,resolution):
     return war_perms,da_perms
 
 def extract_azure_resource_details(s):
+    """
+    Extract Azure resource hierarchy details from a resource scope string.
+
+    Parses an Azure resource scope (e.g., role assignment scope) to extract information
+    about the resource hierarchy level and components. Recognizes different scope levels
+    from root ('/') down to subresources.
+
+    Args:
+        s: Azure resource scope string (e.g., '/subscriptions/xxx/resourcegroups/yyy/...')
+
+    Returns:
+        tuple: (details_tuple, resolution_level) where:
+            - details_tuple: 9-element tuple containing (tenant, mgmt_group, subscription,
+                           resource_group, provider, type, name, subtype, subname)
+            - resolution_level: Integer representing scope hierarchy:
+                1 = Root/Tenant level
+                2 = Management Group
+                3 = Subscription
+                4 = Resource Group
+                6 = Resource
+                8 = Subresource
+                None = Unrecognized format
+    """
     pattern = r'/subscriptions/(?P<subscription>[^/]+)/resourcegroups/(?P<rg>[^/]+)/providers/(?P<provider>[^/]+)/(?P<type>[^/]+)/(?P<name>[^/]+)/(?P<subtype>[^/]+)/(?P<subname>[^/]+)'
     match = re.search(pattern, s.lower())
     if match:
@@ -314,6 +412,22 @@ def extract_azure_resource_details(s):
     return None,None
 
 def probe_group_perms(gid,gtoken):
+  """
+  Probe the number of role assignments for a specific Azure AD group.
+
+  Queries Azure Resource Graph to count how many role assignments exist for
+  a given group ID. Used to determine if a group has Azure RBAC permissions
+  before fetching detailed permission data.
+
+  Args:
+      gid: Azure AD group ID (GUID)
+      gtoken: Azure Resource Graph API token (refreshed if needed)
+
+  Returns:
+      tuple: (count, updated_token) where:
+          - count: Number of role assignments for the group
+          - updated_token: Refreshed API token
+  """
   query='''
 authorizationresources
 | where type == "microsoft.authorization/roleassignments"
@@ -334,6 +448,24 @@ authorizationresources
   return 0,gtoken
 
 def fetch_group_perms(gid,gtoken,current,total):
+  """
+  Fetch detailed role assignments and permissions for an Azure AD group.
+
+  Queries Azure Resource Graph to retrieve all role assignments for a group,
+  including role definitions with their actions, notActions, dataActions, and
+  notDataActions. This provides complete permission details for group-based access.
+
+  Args:
+      gid: Azure AD group ID (GUID)
+      gtoken: Azure Resource Graph API token (refreshed if needed)
+      current: Current progress counter (for display)
+      total: Total number of groups to process (for display)
+
+  Returns:
+      tuple: (results, updated_token) where:
+          - results: List of combined role assignment and definition data
+          - updated_token: Refreshed API token
+  """
   print(f"  ({current}/{total}) FETCHING roles of group",gid)
   query='''
 authorizationresources
@@ -358,6 +490,20 @@ authorizationresources
   return results,gtoken
 
 def fetch_combined(pid):
+  """
+  Fetch combined role assignment and definition data for service principals.
+
+  Queries Azure Resource Graph to retrieve role assignments for service principals,
+  joining with role definitions to get complete permission details. Can fetch for
+  a single SPN (when pid provided) or all SPNs (when pid is None).
+
+  Args:
+      pid: Service principal ID (GUID) to fetch, or None to fetch all SPNs
+
+  Returns:
+      list or None: When pid is provided, returns list of role data for that SPN.
+                    When pid is None, saves all data to ARG.json and returns None.
+  """
   if pid:
     query='''
 authorizationresources
@@ -404,6 +550,27 @@ authorizationresources
     return None
 
 def calculate_WAR(identity,minW,minA,minR):
+  """
+  Calculate the WAR (Write/Action/Read) score for an identity.
+
+  Computes a numerical score representing an identity's Azure RBAC permissions
+  based on write/delete, action, and read capabilities across different scope levels.
+  The score uses the silhouette scoring matrix which weights permissions based on
+  scope (tenant/subscription/resource/etc) and operation type.
+
+  Args:
+      identity: Dictionary containing identity data with 'war_permset', 'da_permset',
+               and 'golden_counts' keys
+      minW: Minimum write score (from inherited group permissions)
+      minA: Minimum action score (from inherited group permissions)
+      minR: Minimum read score (from inherited group permissions)
+
+  Returns:
+      None (modifies identity dictionary in-place, setting 'WAR', 'A', and 'D' fields)
+          - identity['WAR']: Combined WAR score (write + action + read)
+          - identity['A']: Boolean, can assign roles
+          - identity['D']: Boolean, can define roles
+  """
   template={
       'write/delete': minW,
       'action': minA,
@@ -459,6 +626,29 @@ def calculate_WAR(identity,minW,minA,minR):
     identity['D']=True
 
 def generate_WAR_norms(single,combined):
+  """
+  Generate WAR (Write/Action/Read) norms and blast radius scores for Azure service principals.
+
+  This is the main analysis function that processes all service principals in the tenant,
+  calculating their effective permissions including both direct role assignments and
+  inherited permissions from group memberships. It computes WAR scores, identifies
+  Define/Assign capabilities, and calculates blast radius for data plane permissions.
+
+  The function handles three operational modes:
+  1. Single SPN analysis (when 'single' is provided) - displays detailed stats for one SPN
+  2. Full tenant analysis with live data (when args.live=True) - fetches fresh data
+  3. Cached analysis (default) - uses previously cached data for faster processing
+
+  Args:
+      single: Service principal ID for single-SPN analysis, or None for full tenant scan
+      combined: Pre-fetched role data when analyzing a single SPN, or None
+
+  Returns:
+      None (outputs results to console and CSV files)
+          - For single SPN: prints detailed permission analysis
+          - For full scan: generates sorted_NHIs_<date>.csv with all SPNs ranked by risk
+          - When args.frs=True: generates FRS (Fibration) CSV files
+  """
   if single:
     bulk=combined
     spnscache={}
@@ -496,8 +686,6 @@ def generate_WAR_norms(single,combined):
   roles2=sorted(roles2)
   for pid in roles2:
     s+=1
-#    if s>100:
-#      break
     if s%10==1:
       print(f"{s}/{t}")
     if s%100==0:
@@ -566,8 +754,6 @@ def generate_WAR_norms(single,combined):
   c=-1
   for role in bulk:
     c+=1
-#    if c>200:
-#      break
     if args.verbose:
       print("  handling",role['pid'])
     if c%10==1:
@@ -681,7 +867,6 @@ def generate_WAR_norms(single,combined):
                     if rdd==rdid[1]:
                       break
                   if r<resolutions[cnt]:
-                    #print("  +=+= GROUP CUMUL found a lower scope",r,"<",resolutions[cnt],"at counter",cnt,"rdid",rdid[1])
                     resolutions[cnt]=min(r,resolutions[cnt])
                   if ka<strict_resolutions[cnt]:
                     strict_resolutions[cnt]=min(ka,strict_resolutions[cnt])
@@ -700,7 +885,6 @@ def generate_WAR_norms(single,combined):
                     if rdd==rdid[1]:
                       break
                   if r<groups[ag['id']]['resolutions'][cnt]:
-                    #print("  +=+= GROUP found a lower scope",r,"<", groups[ag['id']]['resolutions'][cnt],"at counter",cnt,"rdid",rdid[1])
                     groups[ag['id']]['resolutions'][cnt]=min(r,groups[ag['id']]['resolutions'][cnt])
                   if ka<groups[ag['id']]['strict_resolutions'][cnt]:
                     groups[ag['id']]['strict_resolutions'][cnt]=min(ka,groups[ag['id']]['strict_resolutions'][cnt])
@@ -844,7 +1028,6 @@ def generate_WAR_norms(single,combined):
           cnt+=1
           if ri==rdid[1]:
             if r<spn[role['pid']]['resolutions'][cnt]:
-              #print("  ",spn[role['pid']],"+=+= SPN found a lower scope",r,"<",spn[role['pid']]['resolutions'][cnt],"at counter",cnt,"rdid",rdid[1])
               spn[role['pid']]['resolutions'][cnt]=min(r,spn[role['pid']]['resolutions'][cnt])
             if ka<spn[role['pid']]['strict_resolutions'][cnt]:
               spn[role['pid']]['strict_resolutions'][cnt]=min(ka,spn[role['pid']]['strict_resolutions'][cnt])
@@ -994,16 +1177,6 @@ def generate_WAR_norms(single,combined):
     print("  Azure Control Plane> WAR norm:",spn[s]['WAR'])
     print("  Entra Control Plane> can assign roles:",spn[s]['A'])
     print("  Entra Control Plane> can define roles:",spn[s]['D'])
-    '''
-    if args.verbose:
-      for item in spn[s]['war_permset']:
-        print("  Azure Control Plane>",item)
-      print("")
-      cnt=-1
-      for item in spn[s]['rdids']:
-        cnt+=1
-        print("  Azure Control Plane>",item+":"+str(spn[s]['resolutions'][cnt]))
-    '''
     print("")
     print("  Azure Data Plane> blast radius:",spn[s]['blast_radius'])
     if args.verbose and spn[s]['dataActions']:
@@ -1018,8 +1191,6 @@ def generate_WAR_norms(single,combined):
         for p in pairs:
           if p['distance']==spn[s]['blast_radius']:
             print("  Azure Data Plane> maximum pair: ",p['p1'][0],p['p2'][0])
-#            if 'p2' in p:
-#              print("    ",p['p2'][0])
             _,lca_depth = least_common_ancestor(hierarchy, p['p1'][0], p['p2'][0], collapsed=False, verbose=True)
             found=True
             break
@@ -1036,6 +1207,19 @@ def generate_WAR_norms(single,combined):
     scores2csv(spn) 
 
 def az_ad_sp(token=None):
+  """
+  Retrieve all service principals from Azure Entra ID (formerly Azure AD).
+
+  Fetches a complete list of all service principals in the tenant using Microsoft Graph API.
+  Handles pagination automatically to retrieve all SPNs regardless of tenant size.
+  Results are saved to 'az_ad_sp.json' for caching.
+
+  Args:
+      token: Microsoft Graph API token, or None to generate a new one
+
+  Returns:
+      None (saves results to az_ad_sp.json file)
+  """
   print("retrieving all your SPNs from Entra... Please be patient, il will take a few minutes")
   if not token:
     token = get_token('graph.microsoft.com')
@@ -1058,6 +1242,19 @@ def az_ad_sp(token=None):
     json.dump(all_sps, file, indent=2)
 
 def generate_spns_cache():
+  """
+  Generate a cached lookup table of service principal metadata.
+
+  Fetches all service principals from Entra ID and creates a streamlined cache
+  containing only the essential metadata (ID, type, displayName) for faster lookups
+  during WAR analysis. Results are saved to 'spns_cache.json'.
+
+  Args:
+      None
+
+  Returns:
+      None (saves results to spns_cache.json file)
+  """
   az_ad_sp()
   if os.path.exists('az_ad_sp.json'):
     with open('az_ad_sp.json', 'r') as file:
@@ -1074,6 +1271,20 @@ def generate_spns_cache():
     json.dump(spnscache, file, indent=2)
 
 def scores2csv(data):
+  """
+  Export service principal risk scores to CSV format.
+
+  Converts the analyzed SPN data into a CSV file with risk metrics including
+  WAR scores, blast radius, role assignment counts, and Define/Assign capabilities.
+  Output file is named 'sorted_NHIs_<timestamp>.csv'.
+
+  Args:
+      data: Dictionary of service principal data keyed by SPN ID, where each
+            entry contains risk metrics (WAR, blast_radius, type, name, etc.)
+
+  Returns:
+      None (creates CSV file and prints confirmation message)
+  """
   for d in data:
     data[d]['pid']=d
   csv_file = f"sorted_NHIs_{current_timestamp}.csv"
