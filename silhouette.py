@@ -363,6 +363,113 @@ def partition_permissions(permissions,notpermissions,resolution):
           da_perms.add(da_item)
     return war_perms,da_perms
 
+def _calculate_resolution_scores(resource_resolution):
+    """
+    Calculate resolution scores for a given resource hierarchy level.
+
+    Maps Azure resource resolution levels to two different scoring systems:
+    - General resolution (r): Coarse-grained grouping (0=tenant/MG, 1=sub/RG, 2=resource/subresource)
+    - Strict resolution (ka): Fine-grained hierarchy (0=tenant, 1=MG, 2=sub, 3=RG, 4=resource, 5=subresource)
+
+    Args:
+        resource_resolution: Integer representing the Azure resource hierarchy level
+            (1=tenant, 2=MG, 3=subscription, 4=RG, 6=resource, 8=subresource)
+
+    Returns:
+        tuple: (r, ka) where:
+            - r: General resolution score (0-2)
+            - ka: Strict resolution score (0-5)
+    """
+    # General resolution: groups similar scopes together
+    if resource_resolution >= 5:  # resource or subresource
+        r = 2
+    elif resource_resolution >= 3:  # subscription or resource group
+        r = 1
+    else:  # tenant or management group
+        r = 0
+
+    # Strict resolution: maintains full hierarchy granularity
+    if resource_resolution == 1:  # tenant
+        ka = 0
+    elif resource_resolution == 2:  # management group
+        ka = 1
+    elif resource_resolution == 3:  # subscription
+        ka = 2
+    elif resource_resolution == 4:  # resource group
+        ka = 3
+    elif resource_resolution == 6:  # resource
+        ka = 4
+    else:  # subresource (8)
+        ka = 5
+
+    return r, ka
+
+
+def _initialize_group_dict():
+    """
+    Initialize an empty group permissions dictionary with all required fields.
+
+    Creates a standardized data structure for storing group permission information
+    including role assignments, permission sets, WAR scores, and data actions.
+
+    Args:
+        None
+
+    Returns:
+        dict: Initialized group dictionary with empty/default values for all fields
+    """
+    return {
+        'war_permset': [],
+        'da_permset': [],
+        'golden_counts': {},
+        'dataActions': False,
+        'dataActions_dict': {},
+        'actions_dict': {},
+        'rdids': [],
+        'resolutions': [],
+        'strict_resolutions': [],
+        'WAR': 0,
+        'D': False,
+        'A': False
+    }
+
+
+def _initialize_spn_dict():
+    """
+    Initialize an empty service principal permissions dictionary with all required fields.
+
+    Creates a standardized data structure for storing SPN permission information
+    including role assignments, group memberships, permission sets, WAR scores, and data actions.
+
+    Args:
+        None
+
+    Returns:
+        dict: Initialized SPN dictionary with empty/default values for all fields
+    """
+    return {
+        'war_permset': [],
+        'da_permset': [],
+        'golden_counts': {},
+        'memberships': None,
+        'groups': [],
+        'uras': 0,
+        'iras': 0,
+        'WAR': 0,
+        'A': False,
+        'D': False,
+        'dataActions': False,
+        'dataActions_dict': {},
+        'actions_dict': {},
+        'rdids': [],
+        'resolutions': [],
+        'strict_resolutions': [],
+        'minW': 0,
+        'minA': 0,
+        'minR': 0
+    }
+
+
 def extract_azure_resource_details(s):
     """
     Extract Azure resource hierarchy details from a resource scope string.
@@ -670,10 +777,10 @@ def generate_WAR_norms(single,combined):
       print("ERROR: please load SPNs from Entra by running gneerate_spns_cache first")
       sys.exit()
     print("loaded",len(spnscache),"SPNs from Entra")
-  roles=set([])
+  roles=set()
   for role in bulk:
     roles.add(role['pid'])
-  roles2=set([])
+  roles2=set()
   gtoken=None
   t=0
   for pid in spnscache:
@@ -709,7 +816,7 @@ def generate_WAR_norms(single,combined):
       pr['set_combinedRole']=[]
       if pr not in bulk:
         bulk.append(pr)
-      groupsof=set([])
+      groupsof=set()
       for ag in g0v:
         if args.verbose:
           print("  ",pid,"is member of",ag['id'])
@@ -725,19 +832,7 @@ def generate_WAR_norms(single,combined):
           else: # the group has no azure permissions, let's cache this group if necessary
             if args.verbose:
               print("  group",ag['id'],"has no Azure permissions. We store it empty in the groups cache",count)
-            groups[ag['id']]={}
-            groups[ag['id']]['war_permset']=[]
-            groups[ag['id']]['da_permset']=[]
-            groups[ag['id']]['golden_counts']={}
-            groups[ag['id']]['dataActions']=False
-            groups[ag['id']]['dataActions_dict']={}
-            groups[ag['id']]['actions_dict']={}
-            groups[ag['id']]['rdids']=[]
-            groups[ag['id']]['resolutions']=[]
-            groups[ag['id']]['strict_resolutions']=[]
-            groups[ag['id']]['WAR']=0
-            groups[ag['id']]['D']=False
-            groups[ag['id']]['A']=False
+            groups[ag['id']] = _initialize_group_dict()
         else:
           if args.verbose:
             print(" group ",ag['id'],"was already cached with",len(groups[ag['id']]['rdids']),"rdids and SPN",pid,"was already cached")
@@ -772,26 +867,7 @@ def generate_WAR_norms(single,combined):
       if role['pid'] not in spn:
         if args.verbose:
           print(role['pid'],"not in encountered spns, creating dict entry")
-        spn[role['pid']]={}
-        spn[role['pid']]['war_permset']=[]
-        spn[role['pid']]['da_permset']=[]
-        spn[role['pid']]['golden_counts']={}
-        spn[role['pid']]['memberships']=None
-        spn[role['pid']]['groups']=[]
-        spn[role['pid']]['uras']=0
-        spn[role['pid']]['iras']=0
-        spn[role['pid']]['WAR']=0
-        spn[role['pid']]['A']=False
-        spn[role['pid']]['D']=False
-        spn[role['pid']]['dataActions']=False
-        spn[role['pid']]['dataActions_dict']={}
-        spn[role['pid']]['actions_dict']={}
-        spn[role['pid']]['rdids']=[]
-        spn[role['pid']]['resolutions']=[]
-        spn[role['pid']]['strict_resolutions']=[]
-        spn[role['pid']]['minW']=0
-        spn[role['pid']]['minA']=0
-        spn[role['pid']]['minR']=0
+        spn[role['pid']] = _initialize_spn_dict()
       spn[role['pid']]['type']=spnscache[role['pid']]['servicePrincipalType']
       spn[role['pid']]['name']=spnscache[role['pid']]['displayName']
     else:
@@ -810,7 +886,7 @@ def generate_WAR_norms(single,combined):
         membership[role['pid']]=g0
       if g0 and 'value' in g0:
         g0v=g0['value']
-        groupsof=set([])
+        groupsof=set()
         rdids=[]
         resolutions=[]
         strict_resolutions=[]
@@ -824,41 +900,12 @@ def generate_WAR_norms(single,combined):
               gperms[ag['id']]=g
             else:
               g=gperms[ag['id']]
-            groups[ag['id']]={}
-            groups[ag['id']]['war_permset']=[]
-            groups[ag['id']]['da_permset']=[]
-            groups[ag['id']]['golden_counts']={}
-            groups[ag['id']]['dataActions']=False
-            groups[ag['id']]['dataActions_dict']={}
-            groups[ag['id']]['actions_dict']={}
-            groups[ag['id']]['rdids']=[]
-            groups[ag['id']]['resolutions']=[]
-            groups[ag['id']]['strict_resolutions']=[]
-            groups[ag['id']]['WAR']=0
-            groups[ag['id']]['D']=False
-            groups[ag['id']]['A']=False
+            groups[ag['id']] = _initialize_group_dict()
             resolution=8
             for gr in g:
               for combined in gr['set_combinedRole']:
                 _,rrr=extract_azure_resource_details(combined['scope'])
-                if rrr>=5: # res or subres
-                  r=2
-                elif rrr>=3: # sub or RG
-                  r=1
-                else: # tenant or MG
-                  r=0
-                if rrr==1: # tenant
-                  ka=0
-                elif rrr==2: # MG
-                  ka=1
-                elif rrr==3: # sub
-                  ka=2
-                elif rrr==4:  # RG
-                  ka=3
-                elif rrr==6:  # resource
-                  ka=4
-                else:  # subresource
-                  ka=5
+                r, ka = _calculate_resolution_scores(rrr)
                 rdid=combined['rdid'].split('RoleDefinitions/')
                 cnt=-1
                 if rdid[1] in rdids:
@@ -994,27 +1041,10 @@ def generate_WAR_norms(single,combined):
         print(role['pid'],"GM rdids BEFORE direct rdids",spn[role['pid']]['iras'])
         print("  ",spn[role['pid']]['rdids'])
         print("  ",spn[role['pid']]['resolutions']," strict:",spn[role['pid']]['strict_resolutions'])
-    newrdids=set([])
+    newrdids=set()
     for combined in role['set_combinedRole']:
       _,rrr=extract_azure_resource_details(combined['scope'])
-      if rrr>=5: # res or subres
-        r=2
-      elif rrr>=3: # sub or RG
-        r=1
-      else: # tenant or MG
-        r=0
-      if rrr==1: # tenant
-        ka=0
-      elif rrr==2: # MG
-        ka=1
-      elif rrr==3: # sub
-        ka=2
-      elif rrr==4: # RG
-        ka=3
-      elif rrr==6: # resource
-        ka=4
-      else: # subresource
-        ka=5
+      r, ka = _calculate_resolution_scores(rrr)
       rdid=combined['rdid'].split('RoleDefinitions/')
       if rdid[1] not in spn[role['pid']]['rdids']:
         spn[role['pid']]['rdids'].append(rdid[1])
@@ -1132,8 +1162,8 @@ def generate_WAR_norms(single,combined):
         spn_to_delete.add(s)
     elif args.frs:
       if s not in frs:
-        frs[s]=set([])
-        strict_frs[s]=set([])
+        frs[s]=set()
+        strict_frs[s]=set()
       if args.verbose and (args.single is None):
         print("  adding RDIDS of SPN",s,"to FRS",len(spn[s]['rdids']))
       cnt=-1
